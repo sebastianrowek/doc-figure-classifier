@@ -465,11 +465,15 @@ def main() -> int:
                     llm_pred, llm_cost = llm_classify_image(img)
 
                     if llm_pred and llm_cost:
-                        crop.llm_label = llm_pred.get("label")
-                        dest = llm_pred.get("label")
-                        crop.llm_confidence = llm_pred.get("confidence")
-                        crop.llm_cost = llm_cost
-                        total_llm_cost += llm_cost
+                        llm_label = llm_pred.get("label")
+                        llm_confidence = llm_pred.get("confidence")
+
+                        if llm_confidence and llm_confidence > args.threshold:
+                            crop.llm_label = llm_label
+                            dest = llm_label
+                            crop.llm_confidence = llm_confidence
+                            crop.llm_cost = llm_cost
+                            total_llm_cost += llm_cost
 
                 crop.raw_label = raw_label
                 crop.raw_confidence = round(conf, 4)
