@@ -1,5 +1,5 @@
 [project]
-name = "documentfigureclassifier-v2-5"
+name = "documentfigureclassifier"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,14 @@ dependencies = [
     "liteparse>=2.12.0",
     "llama-cloud>=2.14.1",
 ]
+
+[build-system]
+requires = ["uv_build>=0.9,<0.10"]   # uv init fills in the right pin
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "DocumentFigureClassifier" 
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
@@ -29,4 +37,10 @@ required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64
 dev = [
     "ipykernel>=7.3.0",
     "python-dotenv>=1.2.3",
+]
+# Synthetic training-data generation. Kept out of the default dependencies so
+# the inference environment stays lean -- nothing here is needed at inference.
+synth = [
+    "matplotlib>=3.9",
+    "numpy>=2.0",
 ]

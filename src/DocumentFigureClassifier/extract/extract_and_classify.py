@@ -34,6 +34,9 @@ Expect a few hundred MB and a couple of minutes on that first call.
     # smoke test on three PDFs first -- always do this before a full corpus
     python extract_and_classify.py ./reports ./out --limit 3
 
+    # for this repo
+    python extract_and_classify.py ../../../data/reports ../../../data/parsed --limit 1
+
     # full run
     python extract_and_classify.py ./reports ./out
 
@@ -123,25 +126,13 @@ log = logging.getLogger("extract")
 # Taxonomy
 # --------------------------------------------------------------------------
 
-# Tier-1 labels from the labeling guide. Folders are created for all of them
-# even when the pre-classifier can never propose them -- the labeler needs
-# somewhere to move corrections to.
-TIER1_LABELS = [
-    "bar_vertical",
-    "bar_horizontal",
-    "bar_stacked",
-    "waterfall",
-    "line",
-    "combo_bar_line",
-    "pie_donut",
-    "map",
-    "table",
-    "photo",
-    "logo_icon",
-    "other",
-]
+# Tier-1 labels live in taxonomy.py so the synthetic generator and this script
+# cannot drift apart. Folders are created for all of them even when the
+# pre-classifier can never propose them -- the labeler needs somewhere to move
+# corrections to.
 
-EXTRA_FOLDERS = ["_review", "_unsure", "_broken"]
+from DocumentFigureClassifier.taxonomy import EXTRA_FOLDERS, TIER1_LABELS
+from DocumentFigureClassifier.extract.llm_classify import llm_classify_image
 
 # The pretrained model knows nothing about waterfall, stacked bars, combo
 # charts or donuts. Everything it cannot express collapses into a coarse
@@ -212,6 +203,9 @@ class Crop:
     proposed_label: str | None = None
     routed_to: str | None = None
     filename: str | None = None
+    llm_label: str | None = None
+    llm_confidence: float | None = None
+    llm_cost: float | None = None
 
 
 # --------------------------------------------------------------------------
@@ -438,6 +432,8 @@ def main() -> int:
     n_kept = n_junk = n_review = 0
     t0 = time.time()
 
+    total_llm_cost : float = 0.0
+
     with manifest_path.open("w", encoding="utf-8") as manifest:
         for n, pdf in enumerate(pdfs, 1):
             log.info("[%d/%d] %s", n, len(pdfs), pdf.name)
@@ -464,6 +460,17 @@ def main() -> int:
 
             for (crop, img), (raw_label, conf) in zip(keep, preds):
                 proposed, dest = route(raw_label, conf, args.threshold)
+
+                if dest == "_review":
+                    llm_pred, llm_cost = llm_classify_image(img)
+
+                    if llm_pred and llm_cost:
+                        crop.llm_label = llm_pred.get("label")
+                        dest = llm_pred.get("label")
+                        crop.llm_confidence = llm_pred.get("confidence")
+                        crop.llm_cost = llm_cost
+                        total_llm_cost += llm_cost
+
                 crop.raw_label = raw_label
                 crop.raw_confidence = round(conf, 4)
                 crop.proposed_label = proposed
@@ -485,6 +492,7 @@ def main() -> int:
     )
     log.info("review here: %s", review_root)
     log.info("manifest:    %s", manifest_path)
+    log.info("total LLM cost: %.4f$ct", total_llm_cost)
     return 0
 
 
