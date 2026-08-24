@@ -141,9 +141,13 @@ def llm_classify_image(
                 )
 
     usage_cost = getattr(response.usage, "cost", None) if response.usage else None
+    total_tokens = getattr(response.usage, "total_tokens", None) if response.usage else None
     if isinstance(usage_cost, (int, float)):
         cost = float(usage_cost)
         if logger:
-            logger.info(f"Cost: {cost * 100:.3f} ct for {response.usage.total_tokens} tokens")
+            logger.info(f"Cost: {cost * 100:.3f} $ct")
+    if isinstance(total_tokens, int):
+        if logger:
+            logger.info(f"Total tokens: {total_tokens}")
 
     return prediction, cost
