@@ -12,7 +12,8 @@ import mimetypes
 import os
 from pathlib import Path
 import math
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
+from logging import Logger
 import asyncio
 
 from openai import OpenAI, AsyncOpenAI
@@ -81,56 +82,68 @@ def image_to_data_url(image: ImageInput) -> str:
 
 
 def llm_classify_image(
-        image: ImageInput
+        image: ImageInput,
+        logger: Optional[Logger] = None
 ) -> tuple[Prediction | None, float | None]:
-
-    response = client.chat.completions.create(
-        model=MODEL,
-        temperature=0,
-        max_tokens=200,
-        response_format={"type": "json_schema", "json_schema": LLM_CLASS_SCHEMA},  # type: ignore
-        messages=[
-            {"role": "system", "content": LLM_CLASS_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Classify this chart."},
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": image_to_data_url(image)},
-                    },
-                ],
-            },
-        ],
-        extra_body={
-            "reasoning": {"effort": "minimal"},
-            "usage": {"include": True},
-        },
-    )
 
     prediction: Prediction | None = None
     cost: float | None = None
 
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            temperature=0,
+            max_tokens=200,
+            response_format={"type": "json_schema", "json_schema": LLM_CLASS_SCHEMA},  # type: ignore
+            messages=[
+                {"role": "system", "content": LLM_CLASS_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Classify this chart."},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": image_to_data_url(image)},
+                        },
+                    ],
+                },
+            ],
+            extra_body={
+                "reasoning": {"effort": "minimal"},
+                "usage": {"include": True},
+            },
+        )
+
+    except Exception as e:
+        if logger:
+            logger.error(f"LLM request failed: {e}")
+        return prediction, cost
+
     content = response.choices[0].message.content if response.choices else None
     if not content:
-        print("Error: no message in LLM response")
+        if logger:
+            logger.error("Error: no message in LLM response")
     else:
         try:
             prediction = _parse_prediction(json.loads(content))
         except json.JSONDecodeError:
-            print("Error: invalid JSON in LLM response")
+            if logger:
+                logger.error("Error: invalid JSON in LLM response")
 
         if prediction is None:
-            print(f"Error: response did not match the expected schema: {content!r}")
+            if logger:
+                logger.error(f"Error: response did not match the expected schema: {content!r}")
         else:
-            print(
-                f"Prediction: {prediction['label']} "
-                f"(confidence: {prediction['confidence']:.2f})"
-            )
+            if logger:
+                logger.info(
+                    f"Prediction: {prediction['label']} "
+                    f"(confidence: {prediction['confidence']:.2f})"
+                )
 
     usage_cost = getattr(response.usage, "cost", None) if response.usage else None
     if isinstance(usage_cost, (int, float)):
         cost = float(usage_cost)
-        print(f"Cost: {cost * 100:.3f} ct for {response.usage.total_tokens} tokens")
+        if logger:
+            logger.info(f"Cost: {cost * 100:.3f} ct for {response.usage.total_tokens} tokens")
 
     return prediction, cost

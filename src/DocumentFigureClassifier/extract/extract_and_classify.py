@@ -201,11 +201,12 @@ class Crop:
     raw_label: str | None = None
     raw_confidence: float | None = None
     proposed_label: str | None = None
-    routed_to: str | None = None
-    filename: str | None = None
     llm_label: str | None = None
     llm_confidence: float | None = None
     llm_cost: float | None = None
+    routed_to: str | None = None
+    decision_layer: str | None = None
+    filename: str | None = None
 
 
 # --------------------------------------------------------------------------
@@ -462,7 +463,7 @@ def main() -> int:
                 proposed, dest = route(raw_label, conf, args.threshold)
 
                 if dest == "_review":
-                    llm_pred, llm_cost = llm_classify_image(img)
+                    llm_pred, llm_cost = llm_classify_image(img, log)
 
                     if llm_pred and llm_cost:
                         llm_label = llm_pred.get("label")
@@ -472,8 +473,11 @@ def main() -> int:
                             crop.llm_label = llm_label
                             dest = llm_label
                             crop.llm_confidence = llm_confidence
+                            crop.decision_layer = "llm"
                             crop.llm_cost = llm_cost
                             total_llm_cost += llm_cost
+                        else:
+                            crop.decision_layer = "docling"
 
                 crop.raw_label = raw_label
                 crop.raw_confidence = round(conf, 4)
