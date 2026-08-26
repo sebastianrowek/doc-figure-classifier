@@ -16,13 +16,15 @@ Entscheidungsbaum in Abschnitt 2, nicht das Bauchgefühl.
 
 | Label | Deutsch | Kurzdefinition |
 |---|---|---|
-| `bar_vertical` | Säulendiagramm | Senkrechte Balken auf gemeinsamer Grundlinie |
-| `bar_horizontal` | Balkendiagramm | Waagerechte Balken auf gemeinsamer Grundlinie |
+| `bar` | Balken-/Säulendiagramm | Einfache Balken einer Reihe auf gemeinsamer Grundlinie, senkrecht oder waagerecht |
+| `bar_grouped` | Gruppierte Säulen/Balken | Mehrere Balken je Kategorie nebeneinander, einer pro Reihe |
 | `bar_stacked` | Gestapelte Säulen/Balken | Segmente innerhalb eines Balkens aufeinandergesetzt |
 | `waterfall` | Wasserfall / Brücke | Schwebende Balken zwischen Start- und Endwert |
 | `line` | Liniendiagramm | Werte als verbundener Linienzug |
 | `combo_bar_line` | Kombidiagramm | Balken **und** Linie in einem Plot |
+| `scatter` | Streudiagramm | Punkte in einem X/Y-Koordinatensystem, ohne verbindende Linie |
 | `pie_donut` | Kreis-/Ringdiagramm | Kreisförmige Anteilsdarstellung |
+| `flow` | Flussdiagramm | Kästen/Knoten durch Pfeile verbunden (Prozess, Ablauf, Organigramm) |
 | `map` | Karte | Geografische Darstellung |
 | `table` | Tabelle | Zeilen-/Spaltenraster ohne grafische Kodierung |
 | `photo` | Foto | Fotografische Aufnahme |
@@ -40,52 +42,74 @@ Von oben nach unten durchgehen, beim ersten Treffer stoppen.
 2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → logo_icon
 3. Zeigt das Bild MEHRERE eigenständige Diagramme?            → Regel R1 (Abschnitt 4)
 4. Ist eine geografische Karte das dominante Element?         → map
-5. Sind Balken UND eine Linie als Datenreihen vorhanden?      → combo_bar_line
-6. Kreisförmige Anteilsdarstellung (Voll- oder Ringform)?     → pie_donut
-7. Schweben Balken zwischen Start- und Endwert (Brücke)?      → waterfall
-8. Sind Balken in Segmente unterteilt (gestapelt)?            → bar_stacked
-9. Sind es einfache Balken?
-      senkrecht → bar_vertical      waagerecht → bar_horizontal
-10. Ist es ein Linienzug (auch Fläche darunter)?              → line
-11. Reines Zeilen-/Spaltenraster ohne Grafik?                 → table
-12. Sonst                                                     → other
+5. Kästen/Knoten durch Pfeile verbunden (Prozess/Organigramm)? → flow
+6. Sind Balken UND eine Linie als Datenreihen vorhanden?      → combo_bar_line
+7. Kreisförmige Anteilsdarstellung (Voll- oder Ringform)?     → pie_donut
+8. Schweben Balken zwischen Start- und Endwert (Brücke)?      → waterfall
+9. Sind Balken in Segmente unterteilt (gestapelt)?            → bar_stacked
+10. Mehrere Balken je Kategorie nebeneinander (gruppiert)?    → bar_grouped
+11. Einfache Balken einer Reihe (senkrecht oder waagerecht)?  → bar
+12. Punkte in einem X/Y-System ohne verbindende Linie?        → scatter
+13. Ist es ein Linienzug (auch Fläche darunter)?             → line
+14. Reines Zeilen-/Spaltenraster ohne Grafik?                → table
+15. Sonst                                                    → other
 ```
 
-Die Reihenfolge ist bewusst gewählt: Schritt 5 vor 7/8/9, weil ein Kombidiagramm
-sonst je nach Blickwinkel als Balken- oder Liniendiagramm gelabelt würde.
+Die Reihenfolge ist bewusst gewählt: `combo_bar_line` (Schritt 6) steht vor
+waterfall/stacked/grouped/bar/line, weil ein Kombidiagramm sonst je nach
+Blickwinkel als Balken- oder Liniendiagramm gelabelt würde. `bar_grouped`
+(Schritt 10) wird vor dem einfachen `bar` geprüft und `scatter` (Schritt 12) vor
+`line` — in beiden Paaren geht das erste sonst leicht als das zweite durch.
 
 ---
 
 ## 3. Klassen im Detail
 
-### `bar_vertical` — Säulendiagramm
+### `bar` — Balken-/Säulendiagramm
 
-Senkrechte Balken, alle auf derselben Grundlinie beginnend.
+Einfache Balken **einer Datenreihe**, alle auf derselben Grundlinie beginnend.
+Die Orientierung — senkrecht (Säulen) oder waagerecht (Balken) — wird **nicht**
+unterschieden: Sie ist eine reine Layout-Entscheidung ohne nachgelagerte
+Bedeutung, beide Formen werden gleich geparst.
 
 **Typisch:** Umsatz je Geschäftsjahr, EBIT-Entwicklung, Mitarbeiterzahl,
-F&E-Aufwand, Investitionen.
+F&E-Aufwand, Investitionen; Umsatz nach Region, Top-10-Rankings, Altersstruktur
+der Belegschaft, Umfrageergebnisse.
 
 **Gehört ebenfalls hierher:**
-- Gruppierte Säulen (mehrere Reihen nebeneinander, z. B. Vorjahr/Berichtsjahr).
-  Gruppierung ist eine Eigenschaft der Daten, kein eigener Diagrammtyp.
-- Säulen mit Datenbeschriftung statt Y-Achse.
-- Einzelne hervorgehobene Säule (Farbakzent).
+- Senkrechte (Säulen) **und** waagerechte (Balken) Ausrichtung.
+- Balken mit Datenbeschriftung statt Achse.
+- Einzelner hervorgehobener Balken (Farbakzent).
 
 **Nicht hierher:**
+- Mehrere Reihen als benachbarte Balken je Kategorie → `bar_grouped`
 - Balken in Segmente unterteilt → `bar_stacked`
 - Balken beginnen nicht auf der Grundlinie → `waterfall`
 - Zusätzliche Linie als Datenreihe → `combo_bar_line`
 
-### `bar_horizontal` — Balkendiagramm
+### `bar_grouped` — Gruppiertes Balken-/Säulendiagramm
 
-Wie oben, nur waagerecht.
+Mehrere Balken je Kategorie, nebeneinander gestellt — ein Balken pro Datenreihe,
+nicht gestapelt. Wie bei `bar` wird die Orientierung (senkrecht oder waagerecht)
+nicht unterschieden.
 
-**Typisch:** Umsatz nach Region, Top-10-Rankings, Altersstruktur der Belegschaft,
-Umfrageergebnisse.
+**Typisch:** Vorjahr vs. Berichtsjahr nebeneinander, Ist vs. Plan,
+Regionenvergleich über zwei bis drei Perioden, Mehrreihen-KPI-Vergleiche.
 
-**Abgrenzungshinweis:** Die Orientierung entscheidet, nicht die Semantik. Ein
-Umsatz-nach-Region-Chart kann je nach Layout in `bar_vertical` oder
-`bar_horizontal` fallen — beides ist korrekt.
+**Gehört ebenfalls hierher:**
+- Zwei oder mehr Reihen als benachbarte Balken innerhalb jeder Kategoriegruppe.
+- Senkrecht (gruppierte Säulen) wie waagerecht (gruppierte Balken).
+
+**Nicht hierher:**
+- Einzelne Reihe einfacher Balken → `bar`
+- Reihen innerhalb eines Balkens gestapelt → `bar_stacked`
+- Linie als zusätzliche Reihe → `combo_bar_line`
+
+**Warum getrennt von `bar`?** Gruppierte Balken sind schwerer zu parsen: Je
+Kategorie stehen mehrere Balken, die über Legende und Farben der richtigen Reihe
+zugeordnet werden müssen, und Wertbeschriftungen drängen sich. Die Auslagerung
+gibt diesem schwereren Fall eine eigene Route — dieselbe Begründung wie bei
+`bar_stacked`.
 
 ### `bar_stacked` — Gestapelte Darstellung
 
@@ -101,6 +125,11 @@ Belegschaft nach Region, 100 %-Aufteilungen.
 
 **Wichtigstes Erkennungsmerkmal:** Alle Segmente eines Balkens teilen sich eine
 gemeinsame Grundlinie und liegen lückenlos aufeinander.
+
+**Warum getrennt von `bar`?** Anders als senkrecht/waagerecht wird der Stapel
+bewusst als eigene Klasse geführt: Er ist nachgelagert deutlich schwerer zu
+parsen (überlappende Segmente, Werte nur als Summe ablesbar) und bekommt eine
+eigene Verarbeitungsroute.
 
 ### `waterfall` — Wasserfall- / Brückendiagramm
 
@@ -159,6 +188,24 @@ regelmäßig in der Legende („Ziel 2030", „Ø"), weshalb die frühere Formul
 stand, dass eine Zielwertlinie keine Datenreihe ist. Wenn beide Signale
 auseinanderfallen, entscheidet *verändert sie sich*.
 
+### `scatter` — Streudiagramm
+
+Datenpunkte in einem X/Y-Koordinatensystem, **ohne** verbindende Linie zwischen
+den Punkten.
+
+**Typisch:** Risiko-Rendite-Streuung, Korrelationsdarstellungen,
+Positionierungs- und Portfoliodiagramme mit zwei Wertachsen, Bubble-Charts
+(Punkte mit zusätzlicher Größenkodierung).
+
+**Nicht hierher:**
+- Punkte durch eine Linie verbunden → `line`.
+- Punkte auf einer Karte statt in einem Achsensystem → `map`.
+
+**Hinweis:** Scatter wird vorerst nicht inhaltlich geparst. Die Klasse existiert,
+um Streudiagramme zuverlässig von `line` zu trennen — beide sehen sich ähnlich
+(Achsen, Punktmarker), und eine Verwechslung würde ein Liniendiagramm
+fälschlich zum Parsen schicken.
+
 ### `pie_donut` — Kreis- und Ringdiagramm
 
 Anteile als Kreissegmente.
@@ -183,6 +230,25 @@ Land als Choropleth.
 
 **Auch hierher:** Karten mit eingeblendeten Zahlen, Pins oder kleinen Balken —
 solange die Karte den Bildeindruck bestimmt.
+
+### `flow` — Flussdiagramm
+
+Kästen oder Knoten, durch Pfeile oder Linien zu einem Ablauf verbunden.
+
+**Typisch:** Prozess- und Ablaufdiagramme, Organigramme, Wertschöpfungsketten,
+Entscheidungsbäume, Governance- und Aufbaustrukturen.
+
+**Gehört ebenfalls hierher:**
+- Horizontale wie vertikale Flussrichtung.
+- Knoten mit Symbolen darin — solange Kästen und Pfeile die Struktur bilden.
+
+**Nicht hierher:**
+- Sankey-Diagramme (Flüsse mit proportionaler Breite) → vorerst `other`.
+- Zeitstrahlen/Roadmaps ohne verbindende Ablauflogik → `other`.
+
+**Hinweis:** Das Basismodell (DocumentFigureClassifier) kennt Flussdiagramme
+bereits, weshalb weniger echte Trainingsbeispiele nötig sind als für eine ganz
+neue Klasse. Die Klasse ist als späteres Parsing-Ziel vorgesehen.
 
 ### `table` — Tabelle
 
@@ -218,13 +284,15 @@ Auffangklasse. Nicht optional: ohne sie liefert das Modell selbstbewusste
 Falschaussagen für alles, was es nicht kennt.
 
 **Typisch:**
-- Organigramme, Prozess- und Ablaufdiagramme, Wertschöpfungsketten
 - Zeitstrahlen, Meilensteine, Roadmaps
 - Wesentlichkeits- und Risikomatrizen
 - KPI-Kacheln (große Zahl + Label + Pfeil)
 - Fortschrittsbalken, Tachos, Ampeln
-- Sankey, Radar, Bubble, Tornado
+- Sankey, Radar, Tornado
 - Dekorative Grafik, Trennlinien, Extraktionsartefakte, leere Ausschnitte
+
+Organigramme und Ablaufdiagramme gehören jetzt zu `flow`, Bubble-Charts zu
+`scatter` — nicht mehr hierher.
 
 Wenn eine dieser Unterkategorien häufig auftritt, im Notizfeld vermerken. Ab
 einem gewissen Volumen lohnt sich eine eigene Klasse (siehe Abschnitt 5).
@@ -311,15 +379,20 @@ Extraktionspipeline.
 Eine Klasse ist gerechtfertigt, wenn **beide** Bedingungen erfüllt sind:
 
 1. **Nachgelagerter Nutzen:** Ein Verarbeitungsschritt behandelt sie anders als
-   die bestehenden Klassen. Wenn `bar_vertical` und `bar_horizontal`
-   nachgelagert identisch verarbeitet werden, war die Trennung überflüssig.
+   die bestehenden Klassen. Genau deshalb wurden `bar_vertical` und
+   `bar_horizontal` zu `bar` zusammengelegt — sie werden nachgelagert identisch
+   verarbeitet, die Trennung war überflüssig. `bar_grouped` und `bar_stacked`
+   bleiben dagegen getrennt, weil beide schwerer zu parsen sind als ein
+   einfacher Balken einer Reihe.
 2. **Ausreichendes Volumen:** Mindestens rund 100 echte Beispiele sind
    auffindbar. Darunter lernt das Modell die Klasse nicht, verwässert aber die
-   Nachbarklassen.
+   Nachbarklassen. Ausnahme: Für Klassen, die das Basismodell bereits kennt
+   (`scatter`, `flow`), genügen weniger echte Beispiele, weil das Modell die
+   Repräsentation nur schärft statt sie neu zu lernen — ein belastbares
+   Validierungsset bleibt trotzdem Pflicht.
 
 Kandidaten aus der `other`-Notizspalte, sobald das Volumen reicht:
-`org_chart`, `process_flow`, `timeline`, `matrix`, `kpi_tile`, `area`,
-`gauge_progress`.
+`timeline`, `matrix`, `kpi_tile`, `area`, `gauge_progress`.
 
 ---
 
@@ -331,13 +404,15 @@ Ordner verschieben. Nicht verschieben heißt: Vorschlag bestätigt.
 
 ```
 review/
-├── bar_vertical/
-├── bar_horizontal/
+├── bar/
+├── bar_grouped/
 ├── bar_stacked/
 ├── waterfall/
 ├── line/
 ├── combo_bar_line/
+├── scatter/
 ├── pie_donut/
+├── flow/
 ├── map/
 ├── table/
 ├── photo/
@@ -372,3 +447,4 @@ einer Stelle unklar — nachschärfen, nicht die Labeler ermahnen.
 |---|---|---|
 | 1.0 | — | Erstfassung: 12 Tier-1-Klassen, Regeln R1–R6 |
 | 1.1 | 2026-08-23 | `combo_bar_line` geschärft: Kriterium ist, ob sich die Linie über die Kategorien verändert, nicht ob sie einen Legendeneintrag hat. Behebt den Widerspruch zur Zielwertlinien-Regel. |
+| 1.2 | 2026-08-26 | `bar_vertical` + `bar_horizontal` zu `bar` zusammengelegt (nachgelagert identisch geparst). Gruppierte Balken als eigene Klasse `bar_grouped` ausgelagert, `bar_stacked` bleibt getrennt — beide schwerer zu parsen. Neue Klassen `scatter` (Abgrenzung gegen `line`) und `flow` (Prozess-/Ablauf-/Organigramme, späteres Parsing-Ziel). Jetzt 14 Tier-1-Klassen. |

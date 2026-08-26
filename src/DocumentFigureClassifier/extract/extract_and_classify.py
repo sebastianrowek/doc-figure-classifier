@@ -134,12 +134,14 @@ log = logging.getLogger("extract")
 from DocumentFigureClassifier.taxonomy import EXTRA_FOLDERS, TIER1_LABELS
 from DocumentFigureClassifier.extract.llm_classify import llm_classify_image
 
-# The pretrained model knows nothing about waterfall, stacked bars, combo
-# charts or donuts. Everything it cannot express collapses into a coarse
-# proposal that the labeler splits by hand. bar_chart -> bar_vertical is a
-# guess about the majority case, NOT a reliable label.
+# The pretrained model knows nothing about waterfall, stacked/grouped bars,
+# combo charts or donuts. Everything it cannot express collapses into a coarse
+# proposal that the labeler splits by hand: bar_chart -> bar covers plain,
+# grouped and stacked alike, so the labeler carves bar_grouped and bar_stacked
+# out of the bar/ folder. It DOES know flow charts and scatter plots, which map
+# straight to the new flow / scatter classes.
 DOCLING_TO_TIER1 = {
-    "bar_chart": "bar_vertical",
+    "bar_chart": "bar",
     "line_chart": "line",
     "pie_chart": "pie_donut",
     "geographical_map": "map",
@@ -150,10 +152,10 @@ DOCLING_TO_TIER1 = {
     "icon": "logo_icon",
     "stamp": "logo_icon",
     "signature": "logo_icon",
+    "flow_chart": "flow",
+    "scatter_plot": "scatter",
     # everything else the model knows is not a tier-1 chart type
-    "scatter_plot": "other",
     "box_plot": "other",
-    "flow_chart": "other",
     "engineering_drawing": "other",
     "chemistry_structure": "other",
     "screenshot_from_computer": "other",

@@ -1,30 +1,35 @@
 """
-Bar charts: ``bar_vertical``, ``bar_horizontal`` and ``bar_stacked``.
+Bar charts: ``bar``, ``bar_grouped`` and ``bar_stacked``.
 
 Three tier-1 classes share this module because they share their geometry. The
-labeling guide draws the lines between them precisely:
+labeling guide (taxonomy v1.2) draws the lines between them by parse difficulty,
+not by orientation:
 
-* orientation separates vertical from horizontal, semantics do not
-* orientation is *not* distinguished for stacked -- "Orientierung wird hier
-  nicht unterschieden"
-* grouping is a property of the data, not a chart type, so grouped columns stay
-  `bar_vertical`
+* orientation (vertical/horizontal) is *not* distinguished for any of them --
+  it is a layout choice with no downstream consequence
+* a single series of plain bars is `bar`
+* two or more series drawn side by side is `bar_grouped` -- split off because
+  grouped bars are harder to parse
+* segments stacked within a bar is `bar_stacked`
 * a reference line does not make a chart a combo, however it is captioned
   (guide v1.1)
 
 Sub-types
 ---------
-bar_vertical / bar_horizontal
-    plain, grouped, highlight, target_line, average_line
+bar
+    plain, highlight, target_line, average_line
+
+bar_grouped
+    plain, target_line, average_line
 
 bar_stacked
     plain, horizontal, pct100, red_green_signed, single_dominant
 
-The last two are hard variants: a stack coloured green/red with signed labels
-is the closest a stacked chart ever comes to looking like a bridge, and a stack
-whose second segment is tiny is the closest it comes to looking like a plain
-bar. Both are labelled by construction, which is the whole point of generating
-them.
+The last two stacked variants are hard cases: a stack coloured green/red with
+signed labels is the closest a stacked chart ever comes to looking like a
+bridge, and a stack whose second segment is tiny is the closest it comes to
+looking like a plain bar. Both are labelled by construction, which is the whole
+point of generating them.
 """
 
 from __future__ import annotations
@@ -49,20 +54,21 @@ class _StackLayout(Layout):
     axes_w_pt: float = 1.0
     axes_h_pt: float = 1.0
 
-SUBTYPES_VERTICAL = {
-    "plain": 0.45,
-    "grouped": 0.20,
-    "highlight": 0.12,
-    "target_line": 0.13,
-    "average_line": 0.10,
+# Single-series plain bars. Orientation is picked per sample inside build_spec,
+# so there is one sub-type table, not one per orientation.
+SUBTYPES_BAR = {
+    "plain": 0.58,
+    "highlight": 0.16,
+    "target_line": 0.15,
+    "average_line": 0.11,
 }
 
-SUBTYPES_HORIZONTAL = {
-    "plain": 0.50,
-    "grouped": 0.18,
-    "highlight": 0.14,
-    "target_line": 0.10,
-    "average_line": 0.08,
+# Grouped bars are multi-series by construction; `highlight` (a single accented
+# bar) has no meaning here, so it is dropped.
+SUBTYPES_GROUPED = {
+    "plain": 0.70,
+    "target_line": 0.17,
+    "average_line": 0.13,
 }
 
 SUBTYPES_STACKED = {
@@ -97,22 +103,23 @@ def _n_categories(style: StyleSheet, rng: Rng, horizontal: bool) -> int:
 
 
 def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
-    """Content for a plain (vertical) bar chart."""
-    return _build_plain_spec(sub_type, style, rng, "bar_vertical", horizontal=False)
+    """Content for a plain single-series bar chart; orientation picked per sample."""
+    return _build_plain_spec(sub_type, style, rng, "bar", horizontal=rng.chance(0.5), grouped=False)
 
 
-def build_spec_horizontal(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
-    return _build_plain_spec(sub_type, style, rng, "bar_horizontal", horizontal=True)
+def build_spec_grouped(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
+    """Content for a grouped (multi-series) bar chart; orientation picked per sample."""
+    return _build_plain_spec(sub_type, style, rng, "bar_grouped", horizontal=rng.chance(0.5), grouped=True)
 
 
 def _build_plain_spec(
-    sub_type: str, style: StyleSheet, rng: Rng, label: str, horizontal: bool
+    sub_type: str, style: StyleSheet, rng: Rng, label: str, horizontal: bool, grouped: bool
 ) -> FigureSpec:
     topic = content.pick_topic(rng, style.language)
     n_cat = _n_categories(style, rng, horizontal)
 
     n_series = 1
-    if sub_type == "grouped":
+    if grouped:
         n_cat = max(3, n_cat - 2)
         n_series = rng.randint(2, 3)
 
@@ -162,6 +169,10 @@ def _build_plain_spec(
         )
         extra["ref_kind"] = kind
         extra["ref_label"] = content.reference_label(rng, style.language, kind)
+
+    # Orientation is a per-sample property now, not a class -- carry it on the
+    # spec so the single render_bar can read it back (mirrors bar_stacked).
+    extra["horizontal"] = horizontal
 
     return FigureSpec(
         label=label,
@@ -250,20 +261,17 @@ def build_spec_stacked(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec
 
 
 # --------------------------------------------------------------------------
-# bar_vertical / bar_horizontal
+# bar / bar_grouped
 # --------------------------------------------------------------------------
 
 
-def render_bar_vertical(
+def render_bar(
     spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float
 ) -> RenderResult:
-    return _render_plain(spec, style, rng, oversample, horizontal=False)
-
-
-def render_bar_horizontal(
-    spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float
-) -> RenderResult:
-    return _render_plain(spec, style, rng, oversample, horizontal=True)
+    """Render a plain or grouped bar chart. Single- vs multi-series (which
+    separates `bar` from `bar_grouped`) follows from the spec's series count;
+    orientation is read from the spec. One function serves both classes."""
+    return _render_plain(spec, style, rng, oversample, horizontal=bool(spec.extra.get("horizontal")))
 
 
 def _render_plain(

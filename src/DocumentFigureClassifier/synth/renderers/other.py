@@ -1,5 +1,5 @@
 """
-The catch-all class -- everything that is not one of the eleven chart types.
+The catch-all class -- everything that is not one of the tier-1 chart types.
 
 `other` is internally the most heterogeneous class and gets the most
 sub-generators. Its invariant (base._check_other) is deliberately open: the
@@ -13,10 +13,14 @@ and then hurt the model in production:
 * infographic_frame / multi_chart -- rules R2 and R1. A chart taking less than
   half the frame, or two charts that cannot be cut apart, are `other`.
 
-The chart-shaped sub-types (scatter, radar, bubble, tornado, boxplot) are real
-plots that are simply not tier-1 classes; the sankey/org/process/timeline/matrix
-group are diagrams; kpi_tile and gauge_progress are the dashboard furniture the
-guide lists.
+The chart-shaped sub-types (radar, tornado, boxplot) are real plots that are
+simply not tier-1 classes; the sankey/timeline/matrix group are diagrams;
+kpi_tile and gauge_progress are the dashboard furniture the guide lists.
+
+Note: org charts, process flows, scatter and bubble plots used to be generated
+here. As of taxonomy v1.2 they are their own tier-1 classes (`flow`, `scatter`),
+so they were removed -- generating them here too would ship the same visual
+under two labels. See renderers/flow.py and renderers/scatter.py.
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, PathPatch, Polygon, Rectangle, Wedge
+from matplotlib.patches import Circle, FancyBboxPatch, PathPatch, Rectangle, Wedge
 from matplotlib.path import Path as MplPath
 
 from .. import content, series
@@ -34,25 +38,24 @@ from ..rng import Rng
 from ..style import StyleSheet
 from .base import FigureSpec, RenderResult, Structure
 
+# org_chart / process_flow moved out to the `flow` class, and scatter / bubble
+# to the `scatter` class (taxonomy v1.2). They must NOT be generated here too, or
+# the same visual would ship under two labels and cap both classes' accuracy.
 SUBTYPES = {
-    "org_chart": 0.09,
-    "process_flow": 0.09,
-    "timeline": 0.08,
-    "matrix": 0.07,
-    "kpi_tile": 0.09,
-    "gauge_progress": 0.08,
-    "sankey": 0.05,
-    "radar": 0.05,
-    "bubble": 0.05,
-    "tornado": 0.05,
-    "scatter": 0.05,
-    "boxplot": 0.05,
-    "decorative": 0.06,
-    "blank_artifact": 0.09,
-    "multi_chart": 0.03,
-    "infographic_frame": 0.03,
+    "timeline": 0.10,
+    "matrix": 0.09,
+    "kpi_tile": 0.11,
+    "gauge_progress": 0.10,
+    "sankey": 0.06,
+    "radar": 0.06,
+    "tornado": 0.06,
+    "boxplot": 0.06,
+    "decorative": 0.07,
+    "blank_artifact": 0.11,
+    "multi_chart": 0.04,
+    "infographic_frame": 0.04,
     # Named hard variants from the guide / design doc §5.
-    "table_with_bars": 0.05,
+    "table_with_bars": 0.06,
     "donut_progress": 0.04,
 }
 
@@ -101,16 +104,6 @@ def _canvas(fig, ax, pal, rng, bg=None):
     return ax
 
 
-def _box(ax, x, y, w, h, fc, ec, style, text=None, tc=None, fs=8, bold=False, rounded=True):
-    patch = FancyBboxPatch((x, y), w, h,
-                           boxstyle="round,pad=0,rounding_size=%.1f" % (min(w, h) * 0.12) if rounded else "square,pad=0",
-                           facecolor=fc, edgecolor=ec, linewidth=1.0, mutation_aspect=1.0)
-    ax.add_patch(patch)
-    if text:
-        ax.text(x + w / 2, y + h / 2, text, ha="center", va="center",
-                color=tc, **_fk(style, fs, bold))
-
-
 # --------------------------------------------------------------------------
 # Diagrams
 # --------------------------------------------------------------------------
@@ -121,85 +114,6 @@ _ORG_DE = ("Vorstand", "CEO", "CFO", "COO", "Vertrieb", "Produktion", "F&E",
 _ORG_EN = ("Board", "CEO", "CFO", "COO", "Sales", "Production", "R&D", "HR",
            "Finance", "IT", "Procurement", "Marketing", "Region North",
            "Region South", "Plant A", "Plant B", "Subsidiary Ltd")
-
-# Short single-word step labels; a chevron is too narrow for "Tochter GmbH".
-_STEPS_DE = ("Analyse", "Konzept", "Planung", "Aufbau", "Betrieb", "Start",
-             "Ziel", "Test", "Ausbau", "Review")
-_STEPS_EN = ("Analyze", "Concept", "Design", "Build", "Operate", "Start",
-             "Goal", "Test", "Scale", "Review")
-
-# Short department labels for org-chart boxes -- the boxes are narrow, so the
-# long entries in _ORG_* ("Subsidiary Ltd", "Region North") would overrun them.
-_DEPT_DE = ("CEO", "CFO", "COO", "Vertrieb", "F&E", "HR", "IT", "Finanz",
-            "Einkauf", "Mktg", "Werk A", "Werk B", "Technik", "Recht")
-_DEPT_EN = ("CEO", "CFO", "COO", "Sales", "R&D", "HR", "IT", "Finance",
-            "Buying", "Mktg", "Plant A", "Plant B", "Legal", "Ops")
-
-
-def _org_chart(fig, ax, style, rng):
-    pal = style.palette
-    _canvas(fig, ax, pal, rng)
-    root_word = "Vorstand" if style.language == "de" else "Board"
-    words = rng.shuffled(list(_DEPT_DE if style.language == "de" else _DEPT_EN))
-    words.append(root_word)  # popped first as the root
-    fc = mix(pal.color(0), pal.background, 0.25 if not pal.dark else 0.0)
-    ec = pal.color(0)
-    tc = readable_on(fc)
-    n_child = rng.randint(2, 4)
-    # Box width has to leave a gap between children: bw*n_child must fit in ~84.
-    bw = min(22, 84.0 / n_child - 2.0)
-    bh = 11
-    fs = 7.5 if bw > 18 else 6.3
-    _box(ax, 50 - bw / 2, 80, bw, bh, fc, ec, style, words.pop(), tc, 8, True)
-    xs = np.linspace(8, 92 - bw, n_child)
-    ymid = 55
-    for i, x in enumerate(xs):
-        ax.plot([50, x + bw / 2], [80, ymid + bh], color=ec, linewidth=0.8, zorder=1)
-        _box(ax, x, ymid, bw, bh, lighten(fc, 0.1), ec, style, words.pop() if words else "—", tc, fs)
-        if rng.chance(0.5) and words:
-            _box(ax, x, ymid - 20, bw, bh, lighten(fc, 0.25), ec, style, words.pop(), tc, fs - 0.5)
-            ax.plot([x + bw / 2, x + bw / 2], [ymid, ymid - 20 + bh], color=ec, linewidth=0.8, zorder=1)
-    return {"sub_kind": "org_chart"}
-
-
-def _process_flow(fig, ax, style, rng):
-    pal = style.palette
-    _canvas(fig, ax, pal, rng)
-    steps = rng.randint(3, 4)
-    labels = rng.sample(list(_STEPS_DE if style.language == "de" else _STEPS_EN), steps)
-    cycle = rng.chance(0.3)
-    cols = ramp(pal, steps)
-    if cycle:
-        R = 30
-        for i in range(steps):
-            a = math.radians(90 - i * 360 / steps)
-            cx, cy = 50 + R * math.cos(a), 50 + R * math.sin(a)
-            ax.add_patch(Circle((cx, cy), 12, facecolor=cols[i], edgecolor="none"))
-            ax.text(cx, cy, labels[i], ha="center", va="center", color=readable_on(cols[i]), **_fk(style, 7, True))
-            a2 = math.radians(90 - (i + 0.5) * 360 / steps)
-            ax.add_patch(FancyArrowPatch((50 + (R + 2) * math.cos(math.radians(90 - i * 360 / steps - 12)),
-                                          50 + (R + 2) * math.sin(math.radians(90 - i * 360 / steps - 12))),
-                                         (50 + (R + 2) * math.cos(math.radians(90 - (i + 1) * 360 / steps + 12)),
-                                          50 + (R + 2) * math.sin(math.radians(90 - (i + 1) * 360 / steps + 12))),
-                                         connectionstyle="arc3,rad=0.3", arrowstyle="-|>", mutation_scale=10,
-                                         color=pal.muted, linewidth=1.2))
-    else:
-        w = 92 / steps
-        y = 46
-        h = 13
-        # A number goes inside the chevron; the word goes on its own line below,
-        # where it has the full step width to itself instead of the chevron body.
-        for i in range(steps):
-            x = 4 + i * w
-            pts = [(x, y), (x + w * 0.82, y), (x + w * 0.96, y + h / 2), (x + w * 0.82, y + h),
-                   (x, y + h), (x + w * 0.14, y + h / 2)]
-            ax.add_patch(Polygon(pts, facecolor=cols[i], edgecolor="none"))
-            ax.text(x + w * 0.42, y + h / 2, str(i + 1), ha="center", va="center",
-                    color=readable_on(cols[i]), **_fk(style, 9, True))
-            ax.text(x + w * 0.45, y - 5, labels[i], ha="center", va="top",
-                    color=pal.text, **_fk(style, min(6.5, w * 0.30)))
-    return {"sub_kind": "process_flow"}
-
 
 def _timeline(fig, ax, style, rng):
     pal = style.palette
@@ -409,19 +323,6 @@ def _radar(fig, ax, style, rng):
     return {"sub_kind": "radar"}
 
 
-def _bubble(fig, ax, style, rng):
-    pal = style.palette
-    _plain_axes(fig, ax, style, pal)
-    n = rng.randint(6, 18)
-    xs = [rng.uniform(0, 1) for _ in range(n)]
-    ys = [rng.uniform(0, 1) for _ in range(n)]
-    sz = [rng.uniform(30, 700) for _ in range(n)]
-    cols = ramp(pal, min(n, 5))
-    ax.scatter(xs, ys, s=sz, c=[cols[i % len(cols)] for i in range(n)], alpha=0.6, edgecolors="none")
-    ax.set_xticks([]); ax.set_yticks([])
-    return {"sub_kind": "bubble"}
-
-
 def _tornado(fig, ax, style, rng):
     pal = style.palette
     _plain_axes(fig, ax, style, pal)
@@ -439,23 +340,6 @@ def _tornado(fig, ax, style, rng):
     ax.set_yticklabels([labels[i] for i in order], fontsize=style.tick_pt * 0.75, fontfamily=style.font_family)
     ax.set_xticks([])
     return {"sub_kind": "tornado"}
-
-
-def _scatter(fig, ax, style, rng):
-    pal = style.palette
-    _plain_axes(fig, ax, style, pal)
-    n_series = rng.randint(1, 3)
-    for si in range(n_series):
-        n = rng.randint(12, 40)
-        cx, cy = rng.uniform(0.2, 0.8), rng.uniform(0.2, 0.8)
-        xs = np.clip(np.random.default_rng(rng.randint(0, 10**6)).normal(cx, 0.15, n), 0, 1)
-        ys = np.clip(np.random.default_rng(rng.randint(0, 10**6)).normal(cy, 0.15, n), 0, 1)
-        ax.scatter(xs, ys, s=rng.uniform(8, 30), color=pal.color(si), alpha=0.7, edgecolors="none")
-    if rng.chance(0.4):
-        ax.plot([0, 1], [rng.uniform(0, 0.4), rng.uniform(0.6, 1)], color=pal.muted, linestyle="--", linewidth=1)
-    ax.set_xlim(0, 1); ax.set_ylim(0, 1)
-    ax.tick_params(labelsize=style.tick_pt * 0.7)
-    return {"sub_kind": "scatter"}
 
 
 def _boxplot(fig, ax, style, rng):
@@ -554,7 +438,7 @@ def _blank_artifact(fig, ax, style, rng):
 
 # The chart classes an R1/R2 frame may embed. Deliberately excludes other/map/
 # table/logo/photo so a frame never recurses into itself or wraps a non-chart.
-_EMBEDDABLE = ("bar_vertical", "bar_horizontal", "bar_stacked", "line",
+_EMBEDDABLE = ("bar", "bar_grouped", "bar_stacked", "line",
                "pie_donut", "waterfall", "combo_bar_line")
 
 
@@ -720,10 +604,10 @@ def _lum(c: str) -> float:
 
 
 _DISPATCH = {
-    "org_chart": _org_chart, "process_flow": _process_flow, "timeline": _timeline,
+    "timeline": _timeline,
     "matrix": _matrix, "kpi_tile": _kpi_tile, "gauge_progress": _gauge_progress,
-    "sankey": _sankey, "radar": _radar, "bubble": _bubble, "tornado": _tornado,
-    "scatter": _scatter, "boxplot": _boxplot, "decorative": _decorative,
+    "sankey": _sankey, "radar": _radar, "tornado": _tornado,
+    "boxplot": _boxplot, "decorative": _decorative,
     "blank_artifact": _blank_artifact, "multi_chart": _multi_chart,
     "infographic_frame": _infographic_frame, "table_with_bars": _table_with_bars,
     "donut_progress": _donut_progress,

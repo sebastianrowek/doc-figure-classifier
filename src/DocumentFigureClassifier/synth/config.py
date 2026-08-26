@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .renderers import bars, combo, lines, logos, maps, other, pie, tables, waterfall
+from .renderers import bars, combo, flow, lines, logos, maps, other, pie, scatter, tables, waterfall
 
 
 @dataclass(frozen=True)
@@ -39,17 +39,17 @@ class ClassPlan:
 # nothing else in the pipeline needs to change. An unregistered label raises in
 # base.check(), so a renderer cannot ship without its check.
 REGISTRY: dict[str, ClassPlan] = {
-    "bar_vertical": ClassPlan(
-        label="bar_vertical",
-        subtypes=bars.SUBTYPES_VERTICAL,
+    "bar": ClassPlan(
+        label="bar",
+        subtypes=bars.SUBTYPES_BAR,
         build_spec=bars.build_spec,
-        render=bars.render_bar_vertical,
+        render=bars.render_bar,
     ),
-    "bar_horizontal": ClassPlan(
-        label="bar_horizontal",
-        subtypes=bars.SUBTYPES_HORIZONTAL,
-        build_spec=bars.build_spec_horizontal,
-        render=bars.render_bar_horizontal,
+    "bar_grouped": ClassPlan(
+        label="bar_grouped",
+        subtypes=bars.SUBTYPES_GROUPED,
+        build_spec=bars.build_spec_grouped,
+        render=bars.render_bar,
     ),
     "bar_stacked": ClassPlan(
         label="bar_stacked",
@@ -80,6 +80,18 @@ REGISTRY: dict[str, ClassPlan] = {
         subtypes=pie.SUBTYPES,
         build_spec=pie.build_spec,
         render=pie.render_pie,
+    ),
+    "scatter": ClassPlan(
+        label="scatter",
+        subtypes=scatter.SUBTYPES,
+        build_spec=scatter.build_spec,
+        render=scatter.render,
+    ),
+    "flow": ClassPlan(
+        label="flow",
+        subtypes=flow.SUBTYPES,
+        build_spec=flow.build_spec,
+        render=flow.render,
     ),
     "table": ClassPlan(
         label="table",

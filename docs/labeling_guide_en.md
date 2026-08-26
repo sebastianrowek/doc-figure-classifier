@@ -18,13 +18,15 @@ decision tree in section 2 decides, not your gut.
 
 | Label | German | Short definition |
 |---|---|---|
-| `bar_vertical` | Säulendiagramm | Vertical bars on a shared baseline |
-| `bar_horizontal` | Balkendiagramm | Horizontal bars on a shared baseline |
+| `bar` | Balken-/Säulendiagramm | Plain single-series bars on a shared baseline, vertical or horizontal |
+| `bar_grouped` | Gruppierte Säulen/Balken | Several bars per category side by side, one per series |
 | `bar_stacked` | Gestapelte Säulen/Balken | Segments stacked on top of each other within one bar |
 | `waterfall` | Wasserfall / Brücke | Floating bars between a start and an end value |
 | `line` | Liniendiagramm | Values as a connected line |
 | `combo_bar_line` | Kombidiagramm | Bars **and** a line in one plot |
+| `scatter` | Streudiagramm | Points in an x/y coordinate system, no connecting line |
 | `pie_donut` | Kreis-/Ringdiagramm | Circular part-to-whole display |
+| `flow` | Flussdiagramm | Boxes/nodes connected by arrows (process, flow, org chart) |
 | `map` | Karte | Geographic representation |
 | `table` | Tabelle | Row/column grid without graphical encoding |
 | `photo` | Foto | Photographic image |
@@ -42,53 +44,73 @@ Work top to bottom, stop at the first match.
 2.  Is it a logo, seal, award or pictogram?                    → logo_icon
 3.  Does the image show MULTIPLE independent charts?           → Rule R1 (section 4)
 4.  Is a geographic map the dominant element?                  → map
-5.  Are bars AND a line present as data series?                → combo_bar_line
-6.  Circular part-to-whole display (full or ring form)?        → pie_donut
-7.  Do bars float between a start and an end value (bridge)?   → waterfall
-8.  Are the bars divided into segments (stacked)?              → bar_stacked
-9.  Are they plain bars?
-       vertical → bar_vertical       horizontal → bar_horizontal
-10. Is it a line plot (including a filled area below)?         → line
-11. A pure row/column grid with no graphics?                   → table
-12. Otherwise                                                  → other
+5.  Boxes/nodes connected by arrows (process/org chart)?       → flow
+6.  Are bars AND a line present as data series?                → combo_bar_line
+7.  Circular part-to-whole display (full or ring form)?        → pie_donut
+8.  Do bars float between a start and an end value (bridge)?   → waterfall
+9.  Are the bars divided into stacked segments?                → bar_stacked
+10. Multiple bars per category, side by side (grouped)?        → bar_grouped
+11. Plain single-series bars (vertical or horizontal)?         → bar
+12. Points in an x/y system with no connecting line?           → scatter
+13. Is it a line plot (including a filled area below)?         → line
+14. A pure row/column grid with no graphics?                   → table
+15. Otherwise                                                  → other
 ```
 
-The order is deliberate: step 5 comes before 7/8/9, because otherwise a combo
-chart would get labeled as a bar or a line chart depending on the viewer's
-perspective.
+The order is deliberate: `combo_bar_line` (step 6) comes before
+waterfall/stacked/grouped/bar/line, because otherwise a combo chart would get
+labeled as a bar or a line chart depending on the viewer's perspective.
+`bar_grouped` (step 10) is checked before plain `bar`, and `scatter` (step 12)
+before `line`, because in each pair the first otherwise easily passes as the
+second.
 
 ---
 
 ## 3. Classes in detail
 
-### `bar_vertical` — column chart
+### `bar` — bar / column chart
 
-Vertical bars, all starting from the same baseline.
+Plain bars of a **single data series**, all starting from the same baseline.
+Orientation — vertical (columns) or horizontal (bars) — is **not** distinguished:
+it is a pure layout choice with no downstream consequence, and both forms are
+parsed the same way.
 
 **Typical:** Revenue by fiscal year, EBIT development, headcount, R&D expense,
-capital expenditure.
+capital expenditure; revenue by region, top-10 rankings, workforce age
+structure, survey results.
 
 **Also belongs here:**
-- Grouped columns (several series side by side, e.g. prior year / reporting
-  year). Grouping is a property of the data, not a separate chart type.
-- Columns with data labels instead of a y-axis.
-- A single highlighted column (color accent).
+- Vertical (columns) **and** horizontal (bars) orientation.
+- Bars with data labels instead of an axis.
+- A single highlighted bar (color accent).
 
 **Does not belong here:**
+- Several series shown as adjacent bars per category → `bar_grouped`
 - Bars divided into segments → `bar_stacked`
 - Bars that do not start at the baseline → `waterfall`
 - An additional line as a data series → `combo_bar_line`
 
-### `bar_horizontal` — bar chart
+### `bar_grouped` — grouped bar / column chart
 
-Same as above, but horizontal.
+Several bars per category, placed side by side — one bar per data series, not
+stacked. Like `bar`, orientation (vertical or horizontal) is not distinguished.
 
-**Typical:** Revenue by region, top-10 rankings, workforce age structure, survey
-results.
+**Typical:** Prior year vs. reporting year side by side, actual vs. budget,
+region comparisons across two or three periods, multi-series KPI comparisons.
 
-**Boundary note:** Orientation decides, not semantics. A revenue-by-region chart
-can fall into `bar_vertical` or `bar_horizontal` depending on layout — both are
-correct.
+**Also belongs here:**
+- Two or more series shown as adjacent bars within each category group.
+- Vertical (grouped columns) and horizontal (grouped bars) alike.
+
+**Does not belong here:**
+- A single series of plain bars → `bar`
+- Series stacked within one bar → `bar_stacked`
+- A line as an additional series → `combo_bar_line`
+
+**Why separate from `bar`?** Grouped bars are harder to parse: each category holds
+several bars that must be assigned to the right series via the legend and colors,
+and value labels crowd. Pulling them out gives that harder case its own route —
+the same reasoning that keeps `bar_stacked` separate.
 
 ### `bar_stacked` — stacked display
 
@@ -104,6 +126,10 @@ by region, 100 % breakdowns.
 
 **Key identifying feature:** All segments of a bar share a common baseline and
 sit on top of each other without gaps.
+
+**Why separate from `bar`?** Unlike vertical/horizontal, the stack is kept as its
+own class on purpose: it is markedly harder to parse downstream (overlapping
+segments, values readable only as a sum) and gets its own processing route.
 
 ### `waterfall` — waterfall / bridge chart
 
@@ -160,6 +186,23 @@ legend ("Ziel 2030", "Ø"), which is why the earlier wording ("own axis or own
 legend entry") contradicted the rule that a target line is not a data series.
 Where the two signals disagree, *does it vary* wins.
 
+### `scatter` — scatter plot
+
+Data points in an x/y coordinate system, **without** a line connecting the
+points.
+
+**Typical:** Risk-return scatters, correlation displays, positioning and
+portfolio charts with two value axes, bubble charts (points with an added size
+encoding).
+
+**Does not belong here:**
+- Points connected by a line → `line`.
+- Points on a map instead of an axis system → `map`.
+
+**Note:** Scatter is not parsed for content for now. The class exists to
+reliably separate scatter plots from `line` — the two look alike (axes, point
+markers), and a mix-up would send a line chart off to be parsed by mistake.
+
 ### `pie_donut` — pie and donut chart
 
 Shares as circular segments.
@@ -184,6 +227,26 @@ as a choropleth.
 
 **Also here:** Maps with overlaid numbers, pins or small bars — as long as the
 map dominates the visual impression.
+
+### `flow` — flow chart
+
+Boxes or nodes connected by arrows or lines into a process.
+
+**Typical:** Process and workflow diagrams, org charts, value chains, decision
+trees, governance and structure charts.
+
+**Also belongs here:**
+- Horizontal as well as vertical flow direction.
+- Nodes with symbols inside them — as long as boxes and arrows form the
+  structure.
+
+**Does not belong here:**
+- Sankey diagrams (flows with proportional width) → `other` for now.
+- Timelines/roadmaps without connecting flow logic → `other`.
+
+**Note:** The base model (DocumentFigureClassifier) already knows flow charts, so
+fewer real training examples are needed than for a brand-new class. The class is
+intended as a future parsing target.
 
 ### `table` — table
 
@@ -218,13 +281,15 @@ Catch-all class. Not optional: without it the model produces confident false
 statements for everything it does not know.
 
 **Typical:**
-- Org charts, process and flow diagrams, value chains
 - Timelines, milestones, roadmaps
 - Materiality and risk matrices
 - KPI tiles (large number + label + arrow)
 - Progress bars, gauges, traffic lights
-- Sankey, radar, bubble, tornado
+- Sankey, radar, tornado
 - Decorative graphics, separators, extraction artifacts, empty crops
+
+Org charts and flow diagrams now go to `flow`, bubble charts to `scatter` — no
+longer here.
 
 If one of these subcategories occurs frequently, note it in the notes field.
 Past a certain volume it is worth its own class (see section 5).
@@ -310,13 +375,19 @@ training, but keep them: they reveal errors in the extraction pipeline.
 A class is justified when **both** conditions hold:
 
 1. **Downstream benefit:** Some processing step treats it differently from the
-   existing classes. If `bar_vertical` and `bar_horizontal` are processed
-   identically downstream, the split was unnecessary.
+   existing classes. This is exactly why `bar_vertical` and `bar_horizontal` were
+   merged into `bar` — they are processed identically downstream, so the split
+   was unnecessary. `bar_grouped` and `bar_stacked`, by contrast, stay separate
+   because both are harder to parse than a plain single-series bar.
 2. **Sufficient volume:** At least roughly 100 real examples are findable. Below
    that the model does not learn the class but does dilute its neighbors.
+   Exception: for classes the base model already knows (`scatter`, `flow`),
+   fewer real examples suffice, because the model only sharpens an existing
+   representation rather than learning one from scratch — a trustworthy
+   validation set is still mandatory.
 
-Candidates from the `other` notes column, once volume suffices: `org_chart`,
-`process_flow`, `timeline`, `matrix`, `kpi_tile`, `area`, `gauge_progress`.
+Candidates from the `other` notes column, once volume suffices: `timeline`,
+`matrix`, `kpi_tile`, `area`, `gauge_progress`.
 
 ---
 
@@ -328,13 +399,15 @@ right folder. Not moving it means the proposal is confirmed.
 
 ```
 review/
-├── bar_vertical/
-├── bar_horizontal/
+├── bar/
+├── bar_grouped/
 ├── bar_stacked/
 ├── waterfall/
 ├── line/
 ├── combo_bar_line/
+├── scatter/
 ├── pie_donut/
+├── flow/
 ├── map/
 ├── table/
 ├── photo/
@@ -368,3 +441,4 @@ somewhere — sharpen it, do not admonish the labelers.
 |---|---|---|
 | 1.0 | — | First edition: 12 tier-1 classes, rules R1–R6 |
 | 1.1 | 2026-08-23 | `combo_bar_line` sharpened: the test is whether the line varies across categories, not whether it has a legend entry. Resolves a contradiction with the target-line rule. |
+| 1.2 | 2026-08-26 | Merged `bar_vertical` + `bar_horizontal` into `bar` (parsed identically downstream). Split grouped bars into their own class `bar_grouped`, and kept `bar_stacked` separate — both harder to parse. New classes `scatter` (to separate it from `line`) and `flow` (process/workflow/org charts, future parsing target). Now 14 tier-1 classes. |

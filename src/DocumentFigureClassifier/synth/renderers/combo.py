@@ -19,7 +19,7 @@ has a legend entry. So:
     markers_line    the line carries point markers
 
 The mirror image of ``flat_line`` lives in bars.py as ``target_line`` and
-``average_line``: genuinely constant lines over bars, labelled ``bar_vertical``.
+``average_line``: genuinely constant lines over bars, labelled ``bar``.
 Between them the two classes cover both sides of the confusion.
 """
 

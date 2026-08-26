@@ -8,7 +8,7 @@ Quick start
 
     # look at what the degradation is doing to one sample
     python -m DocumentFigureClassifier.synth.cli \
-        --regenerate bar_vertical__plain__00123456 --dump-stages tmp/stages
+        --regenerate bar__plain__00123456 --dump-stages tmp/stages
 
 Everything about a sample follows from ``(label, sub_type, seed)``, so any
 image in the manifest can be reproduced exactly by passing its ``crop_id`` to

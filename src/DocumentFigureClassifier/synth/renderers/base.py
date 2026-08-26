@@ -4,8 +4,8 @@ Renderer protocol and label invariants.
 This is the part of the generator that keeps the dataset honest. Every renderer
 reports what it structurally drew; ``check()`` verifies that this is still
 consistent with the label the sample was generated under. A waterfall whose
-randomisation happened to put every bar on the baseline is a ``bar_vertical``,
-and without this check it would ship as a mislabeled waterfall.
+randomisation happened to put every bar on the baseline is a ``bar``, and
+without this check it would ship as a mislabeled waterfall.
 
 The rules below are the labeling guide, section 2 and 3, expressed as code.
 One place they are *tighter* than the prose: the guide says a line makes a
@@ -47,6 +47,11 @@ class Structure:
 
     # circular
     pie_segments: int = 0
+
+    # scatter / flow -- both promoted out of `other` in taxonomy v1.2
+    scatter_points: int = 0
+    flow_nodes: int = 0
+    flow_edges: int = 0
 
     # tables / maps / misc, used from phase 3 on
     table_rows: int = 0
@@ -96,11 +101,14 @@ class InvariantViolation(RuntimeError):
 # --------------------------------------------------------------------------
 
 
-def _check_bar(s: Structure, orientation: str) -> str | None:
+def _check_bar(s: Structure) -> str | None:
+    # Orientation no longer separates classes (taxonomy v1.2): `bar` is any
+    # plain, single-series bar chart, vertical or horizontal. What must hold is
+    # that it is a single series -- several side by side is `bar_grouped`.
     if s.bars_total < 3:
         return f"only {s.bars_total} bars"
-    if s.orientation != orientation:
-        return f"orientation is {s.orientation}, expected {orientation}"
+    if s.bar_series != 1:
+        return f"{s.bar_series} bar series -- several side by side is bar_grouped"
     if s.segments_per_bar != 1:
         return f"{s.segments_per_bar} segments per bar -- that is bar_stacked"
     if s.bars_on_baseline != s.bars_total:
@@ -112,12 +120,20 @@ def _check_bar(s: Structure, orientation: str) -> str | None:
     return None
 
 
-def _check_bar_vertical(s: Structure) -> str | None:
-    return _check_bar(s, "vertical")
-
-
-def _check_bar_horizontal(s: Structure) -> str | None:
-    return _check_bar(s, "horizontal")
+def _check_bar_grouped(s: Structure) -> str | None:
+    # Same geometry as `bar`, but two or more series drawn side by side. Split
+    # off because grouped bars are harder to parse (guide, taxonomy v1.2).
+    if s.bar_series < 2:
+        return f"{s.bar_series} bar series -- a grouped chart needs at least 2"
+    if s.segments_per_bar != 1:
+        return f"{s.segments_per_bar} segments per bar -- that is bar_stacked"
+    if s.bars_on_baseline != s.bars_total:
+        return f"{s.bars_total - s.bars_on_baseline} bars off the baseline -- that is waterfall"
+    if s.line_series and not s.line_is_reference:
+        return "a non-reference line series -- that is combo_bar_line"
+    if s.connectors:
+        return "connector lines -- that is waterfall"
+    return None
 
 
 def _check_bar_stacked(s: Structure) -> str | None:
@@ -170,6 +186,22 @@ def _check_pie(s: Structure) -> str | None:
     return None
 
 
+def _check_scatter(s: Structure) -> str | None:
+    if s.scatter_points < 5:
+        return f"only {s.scatter_points} points"
+    if s.bar_series or s.pie_segments:
+        return "bars or pie segments -- not a scatter"
+    if s.line_series and not s.line_is_reference:
+        return "a data line through the points -- that is line"
+    return None
+
+
+def _check_flow(s: Structure) -> str | None:
+    if s.flow_nodes < 2:
+        return f"{s.flow_nodes} node(s) -- a flow needs at least 2"
+    return None
+
+
 def _check_map(s: Structure) -> str | None:
     if s.geometry_area_frac < 0.45:
         return f"map covers only {s.geometry_area_frac:.0%} of the image"
@@ -199,13 +231,15 @@ def _check_other(s: Structure) -> str | None:
 
 
 _CHECKS = {
-    "bar_vertical": _check_bar_vertical,
-    "bar_horizontal": _check_bar_horizontal,
+    "bar": _check_bar,
+    "bar_grouped": _check_bar_grouped,
     "bar_stacked": _check_bar_stacked,
     "waterfall": _check_waterfall,
     "line": _check_line,
     "combo_bar_line": _check_combo,
     "pie_donut": _check_pie,
+    "scatter": _check_scatter,
+    "flow": _check_flow,
     "map": _check_map,
     "table": _check_table,
     "photo": lambda s: None,

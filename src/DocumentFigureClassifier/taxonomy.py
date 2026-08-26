@@ -10,13 +10,15 @@ See docs/labeling_guide_en.md (German original: docs/labeling_guide_de.md).
 from __future__ import annotations
 
 TIER1_LABELS = [
-    "bar_vertical",
-    "bar_horizontal",
+    "bar",
+    "bar_grouped",
     "bar_stacked",
     "waterfall",
     "line",
     "combo_bar_line",
     "pie_donut",
+    "scatter",
+    "flow",
     "map",
     "table",
     "photo",
