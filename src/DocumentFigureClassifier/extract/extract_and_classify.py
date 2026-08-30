@@ -32,13 +32,13 @@ from the Hugging Face Hub on first run and cached in ~/.cache/huggingface
 Expect a few hundred MB and a couple of minutes on that first call.
 
     # smoke test on three PDFs first -- always do this before a full corpus
-    python extract_and_classify.py ./reports ./out --limit 3
+    python ./src/DocumentFigureClassifier/extract/extract_and_classify.py ./reports ./out --limit 3
 
     # for this repo
-    python extract_and_classify.py ../../../data/reports ../../../data/parsed --limit 1
+    python ./src/DocumentFigureClassifier/extract/extract_and_classify.py ./data/reports ./data/parsed --limit 1
 
     # full run
-    python extract_and_classify.py ./reports ./out
+    python ./src/DocumentFigureClassifier/extract/extract_and_classify.py ./reports ./out
 
 Then open ./out/review/ and start moving files between folders.
 
@@ -90,16 +90,18 @@ copy both folders over, then point the script at them:
 
 from __future__ import annotations
 
+import os
 import argparse
 import json
 import logging
 import shutil
 import sys
 import time
-from typing import cast
+from typing import cast, Optional
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from openai import OpenAI, AsyncOpenAI
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
@@ -202,7 +204,7 @@ class Crop:
     bbox: list[float] | None
     raw_label: str | None = None
     raw_confidence: float | None = None
-    proposed_label: str | None = None
+    mapped_label: str | None = None
     llm_label: str | None = None
     llm_confidence: float | None = None
     llm_cost: float | None = None
@@ -355,12 +357,16 @@ class FigureClassifier:
         return preds
 
 
-def route(raw_label: str, confidence: float, threshold: float) -> tuple[str, str]:
+def route_docling(
+        raw_label: str, 
+        confidence: float, 
+        threshold: float
+) -> tuple[str, str, str]:
     """Map a raw prediction to (proposed_label, destination_folder)."""
     proposed = DOCLING_TO_TIER1.get(raw_label, "other")
     if confidence < threshold or raw_label in ALWAYS_REVIEW:
-        return proposed, "_review"
-    return proposed, proposed
+        return proposed, "_review", "manual"
+    return proposed, proposed, "docling"
 
 
 # --------------------------------------------------------------------------
@@ -398,10 +404,27 @@ def main() -> int:
     )
     ap.add_argument("--threads", type=int, default=None, help="CPU threads; set to physical core count")
     ap.add_argument("--limit", type=int, default=None, help="process at most N PDFs (for testing)")
+    ap.add_argument(
+        "--enable-llm-class",
+        action="store_true",
+        help="use the LLM as a second classification layer (needs OPENROUTER_API_KEY)",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     logging.getLogger("docling").setLevel(logging.WARNING)
+
+    if args.enable_llm_class:
+        if "OPENROUTER_API_KEY" not in os.environ:
+            log.error("OPENROUTER_API_KEY environment variable is not set. Please set it to use LLM classification.")
+            return 1
+        openai_client = OpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
+
+    else:
+        openai_client = None
 
     pdfs = (
         [args.input]
@@ -462,35 +485,30 @@ def main() -> int:
             preds = classifier.predict([img for _, img in keep])
 
             for (crop, img), (raw_label, conf) in zip(keep, preds):
-                proposed, dest = route(raw_label, conf, args.threshold)
-
-                if dest == "_review":
-                    llm_pred, llm_cost = llm_classify_image(img, log)
-
-                    if llm_pred and llm_cost:
-                        llm_label = llm_pred.get("label")
-                        llm_confidence = llm_pred.get("confidence")
-
-                        if llm_confidence and llm_confidence > args.threshold:
-                            crop.llm_label = llm_label
-                            dest = llm_label
-                            crop.llm_confidence = llm_confidence
-                            crop.decision_layer = "llm"
-                            crop.llm_cost = llm_cost
-                            total_llm_cost += llm_cost
-                        else:
-                            crop.decision_layer = "docling"
+                mapped_label, destination, decision_layer = route_docling(raw_label, conf, args.threshold)
 
                 crop.raw_label = raw_label
                 crop.raw_confidence = round(conf, 4)
-                crop.proposed_label = proposed
-                crop.routed_to = dest
-                # encode the proposal in the filename so it survives a move
-                crop.filename = f"{crop.crop_id}__{proposed}__{conf:.2f}.png"
-                img.save(review_root / dest / crop.filename)
+                crop.mapped_label = mapped_label
+
+                if openai_client is not None:
+                    pred, cost, _err, _ = llm_classify_image(openai_client, img, log)
+                    if pred is not None:
+                        crop.llm_label = pred["label"]
+                        crop.llm_confidence = round(pred["confidence"], 4)
+                        crop.llm_cost = round(cost, 4) if cost else None
+                        total_llm_cost += cost or 0.0
+                        if pred["confidence"] > args.threshold:
+                            destination = pred["label"]
+                            decision_layer = "llm"
+
+                crop.routed_to = destination
+                crop.decision_layer = decision_layer
+                crop.filename = f"{crop.crop_id}__{mapped_label}__{conf:.2f}.png"
+                img.save(review_root / destination / crop.filename)
                 manifest.write(json.dumps(asdict(crop), ensure_ascii=False) + "\n")
                 n_kept += 1
-                if dest == "_review":
+                if destination == "_review":
                     n_review += 1
 
             log.info("  %d figures kept", len(keep))

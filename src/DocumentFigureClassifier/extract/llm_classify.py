@@ -10,6 +10,7 @@ import base64
 import json
 import mimetypes
 import os
+import re
 from pathlib import Path
 import math
 from typing import Any, Optional, TypedDict
@@ -18,28 +19,118 @@ import asyncio
 
 from openai import OpenAI, AsyncOpenAI
 
-from DocumentFigureClassifier.schemas import LLM_CLASS_SCHEMA, LLM_CLASS_SYSTEM_PROMPT
+from DocumentFigureClassifier.schemas import (
+    LLM_CLASS_SCHEMA,
+    LLM_CLASS_SYSTEM_PROMPT,
+    LlmClassifyConfig,
+)
 
 from dotenv import load_dotenv
 load_dotenv()
 
-MODEL = "google/gemini-3.7-flash"
+# Canonical settings for a classification call. Override by passing a custom
+# LlmClassifyConfig to the classify functions.
+DEFAULT_CONFIG = LlmClassifyConfig()
 
 from io import BytesIO
 from PIL import Image
 
 ImageInput = str | Path | Image.Image
 
-client = OpenAI(
-    base_url="https://openrouter.ai/api/v1",
-    api_key=os.environ["OPENROUTER_API_KEY"],
-)
-
-
 class Prediction(TypedDict):
     label: str
     confidence: float
 
+
+def _extract_json(content: str) -> Any:
+    """Parse a JSON object from a model reply.
+
+    Some models wrap the JSON in prose ("Here is the JSON requested: {...}") or
+    ```json fences instead of honoring strict structured output. Try a direct
+    parse first, then fall back to the outermost {...} block. Raises
+    json.JSONDecodeError if no JSON object can be recovered.
+    """
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{.*\}", content, re.DOTALL)  # first '{' .. last '}'
+    if m:
+        return json.loads(m.group(0))  # may raise -> caller treats as invalid JSON
+    raise json.JSONDecodeError("no JSON object found in response", content or "", 0)
+
+
+def _process_response(
+        response,
+        logger=None
+) -> tuple[Prediction | None, float | None, str | None, str | None]:
+    prediction: Prediction | None = None
+    cost: float | None = None
+    error: str | None = None
+
+    content = response.choices[0].message.content if response.choices else None
+    if not content:
+        error = "no message in LLM response"
+        if logger:
+            logger.error(f"Error: {error}")
+    else:
+        try:
+            prediction = _parse_prediction(_extract_json(content))
+        except json.JSONDecodeError:
+            error = "invalid JSON in LLM response"
+            if logger:
+                logger.error(f"Error: {error}")
+
+        if prediction is None and error is None:
+            error = f"response did not match the expected schema: {content!r}"
+            if logger:
+                logger.error(f"Error: {error}")
+        elif prediction is not None:
+            if logger:
+                logger.info(
+                    f"Prediction: {prediction['label']} "
+                    f"(confidence: {prediction['confidence']:.2f})"
+                )
+
+    usage_cost = getattr(response.usage, "cost", None) if response.usage else None
+    total_tokens = getattr(response.usage, "total_tokens", None) if response.usage else None
+    if isinstance(usage_cost, (int, float)):
+        cost = float(usage_cost)
+        if logger:
+            logger.info(f"Cost: {cost * 100:.3f} $ct")
+    if isinstance(total_tokens, int):
+        if logger:
+            logger.info(f"Total tokens: {total_tokens}")
+
+    return prediction, cost, error, content
+
+def _request_kwargs(image: ImageInput, config: LlmClassifyConfig = DEFAULT_CONFIG) -> dict:
+    kwargs = {
+        "model": config.model,
+        "temperature": config.temperature,
+        "max_tokens": config.max_tokens,
+        "response_format":{"type": "json_schema", "json_schema": LLM_CLASS_SCHEMA},  # type: ignore
+        "messages":[
+            {"role": "system", "content": LLM_CLASS_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Classify this chart."},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": image_to_data_url(image)},
+                    },
+                ],
+            },
+        ],
+        "extra_body":{
+            "reasoning": {"effort": config.reasoning_effort},
+            "usage": {"include": True},
+            # only route to endpoints that actually honor response_format
+            "provider": {"require_parameters": config.require_parameters},
+        },
+    }
+    return kwargs
 
 def _parse_prediction(raw: Any) -> Prediction | None:
     """Return a well-typed Prediction, or None if the payload doesn't fit."""
@@ -80,74 +171,43 @@ def image_to_data_url(image: ImageInput) -> str:
         data = path.read_bytes()
     return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
-
-def llm_classify_image(
+async def async_llm_classify_image(
+        client: AsyncOpenAI,
         image: ImageInput,
-        logger: Optional[Logger] = None
-) -> tuple[Prediction | None, float | None]:
-
-    prediction: Prediction | None = None
-    cost: float | None = None
+        logger: Optional[Logger] = None,
+        config: LlmClassifyConfig = DEFAULT_CONFIG,
+) -> tuple[Prediction | None, float | None, str | None, str | None]:
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL,
-            temperature=0,
-            max_tokens=200,
-            response_format={"type": "json_schema", "json_schema": LLM_CLASS_SCHEMA},  # type: ignore
-            messages=[
-                {"role": "system", "content": LLM_CLASS_SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "Classify this chart."},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": image_to_data_url(image)},
-                        },
-                    ],
-                },
-            ],
-            extra_body={
-                "reasoning": {"effort": "minimal"},
-                "usage": {"include": True},
-            },
+        response = await client.chat.completions.create(
+            **_request_kwargs(image, config)
         )
 
     except Exception as e:
+        error = f"LLM request failed: {e}"
         if logger:
-            logger.error(f"LLM request failed: {e}")
-        return prediction, cost
+            logger.error(error)
+        return None, None, error, None
 
-    content = response.choices[0].message.content if response.choices else None
-    if not content:
+    return _process_response(response, logger)
+
+
+def llm_classify_image(
+        client: OpenAI,
+        image: ImageInput,
+        logger: Optional[Logger] = None,
+        config: LlmClassifyConfig = DEFAULT_CONFIG,
+) -> tuple[Prediction | None, float | None, str | None, str | None]:
+
+    try:
+        response = client.chat.completions.create(
+            **_request_kwargs(image, config)
+        )
+
+    except Exception as e:
+        error = f"LLM request failed: {e}"
         if logger:
-            logger.error("Error: no message in LLM response")
-    else:
-        try:
-            prediction = _parse_prediction(json.loads(content))
-        except json.JSONDecodeError:
-            if logger:
-                logger.error("Error: invalid JSON in LLM response")
+            logger.error(error)
+        return None, None, error, None
 
-        if prediction is None:
-            if logger:
-                logger.error(f"Error: response did not match the expected schema: {content!r}")
-        else:
-            if logger:
-                logger.info(
-                    f"Prediction: {prediction['label']} "
-                    f"(confidence: {prediction['confidence']:.2f})"
-                )
-
-    usage_cost = getattr(response.usage, "cost", None) if response.usage else None
-    total_tokens = getattr(response.usage, "total_tokens", None) if response.usage else None
-    if isinstance(usage_cost, (int, float)):
-        cost = float(usage_cost)
-        if logger:
-            logger.info(f"Cost: {cost * 100:.3f} $ct")
-    if isinstance(total_tokens, int):
-        if logger:
-            logger.info(f"Total tokens: {total_tokens}")
-
-    return prediction, cost
+    return _process_response(response, logger)
