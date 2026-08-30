@@ -1,7 +1,7 @@
 [project]
 name = "documentfigureclassifier"
 version = "0.1.0"
-requires-python = ">=3.12"
+requires-python = ">=3.11,<3.12"
 dependencies = [
     "docling",
     "transformers",
@@ -9,9 +9,10 @@ dependencies = [
     "torch",
     "torchvision",
     "openai>=3.3.1",
-    "liteparse>=2.12.0",
+    "liteparse>=2.13,<2.14",
     "llama-cloud>=2.14.1",
     "datasets>=5.0.1",
+    "pymupdf>=1.28.2",
 ]
 
 [build-system]
@@ -38,6 +39,12 @@ required-environments = ["sys_platform == 'win32' and platform_machine == 'AMD64
 dev = [
     "ipykernel>=7.3.0",
     "python-dotenv>=1.2.3",
+]
+eval = [
+    "matplotlib>=3.9",
+    "pandas>=2.0",
+    "scikit-learn>=1.5",
+    "seaborn>=0.13",
 ]
 # Synthetic training-data generation. Kept out of the default dependencies so
 # the inference environment stays lean -- nothing here is needed at inference.
