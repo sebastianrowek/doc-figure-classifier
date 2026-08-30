@@ -7,9 +7,13 @@ Pipeline
 1. Docling detects picture regions on each page and renders them as crops.
    (Layout detection, not raster extraction -- this is what makes vector
    charts work; see the note on PyMuPDF at the bottom of this file.)
+   With --include-tables it also crops the table regions the layout model
+   finds and routes them straight to the table/ folder (see step 4).
 2. Junk crops are filtered out by size / area / aspect ratio.
-3. Each crop is classified by DocumentFigureClassifier-v2.5.
-4. Its 26 classes are mapped onto the tier-1 taxonomy from the guide.
+3. Each picture crop is classified by DocumentFigureClassifier-v2.5.
+4. Its 26 classes are mapped onto the tier-1 taxonomy from the guide. Table
+   crops skip the classifier -- docling's layout label is more reliable than
+   the CNN at the table class, so they go directly to table/.
 5. Crops are written to review/<proposed_label>/, low-confidence ones to
    review/_review/, plus a manifest.jsonl with all metadata.
 
@@ -47,8 +51,11 @@ Useful flags on CPU:
     --threads 8       CPU threads; set to your physical core count
     --scale 3.0       higher render resolution; use if waterfall connector
                       lines look faint in the crops
-    --include-tables  also export detected tables (turns on TableFormer,
-                      which is expensive -- leave off unless you need it)
+    --include-tables  also crop detected tables into the table/ folder. Cheap:
+                      it renders page images so the table regions can be
+                      cropped, but does NOT run TableFormer (cell-structure
+                      recognition) -- this pipeline only wants the crop, not
+                      the grid.
     --limit N         process at most N PDFs
 
 Performance
@@ -134,6 +141,7 @@ log = logging.getLogger("extract")
 # corrections to.
 
 from DocumentFigureClassifier.taxonomy import EXTRA_FOLDERS, TIER1_LABELS
+from DocumentFigureClassifier.schemas import LlmClassifyConfig
 from DocumentFigureClassifier.extract.llm_classify import llm_classify_image
 
 # The pretrained model knows nothing about waterfall, stacked/grouped bars,
@@ -229,11 +237,16 @@ def build_converter(
     opts = PdfPipelineOptions()
     opts.images_scale = scale  # 1.0 == 72 dpi; 2.0 ~ 144 dpi
     opts.generate_picture_images = True
-    opts.generate_page_images = False
+    # Tables have no per-item image cache (the old generate_table_images is
+    # deprecated), so they must be cropped from the rendered page raster --
+    # only needed when we actually export tables.
+    opts.generate_page_images = do_tables
     opts.do_ocr = ocr  # annual reports are usually digital -> off is much faster
-    # TableFormer is expensive and its output is only used with --include-tables.
-    # Leaving it on otherwise burns roughly a third of the runtime for nothing.
-    opts.do_table_structure = do_tables
+    # TableFormer (cell-structure recognition) is the expensive stage and this
+    # pipeline never reads table.data -- we only keep the crop as an image. The
+    # layout model still detects table regions and yields TableItems, so we get
+    # the table crops without ever paying for TableFormer.
+    opts.do_table_structure = False
     if artifacts_path is not None:
         opts.artifacts_path = str(artifacts_path)
 
@@ -394,7 +407,11 @@ def main() -> int:
     ap.add_argument("--min-side", type=int, default=120, help="discard crops narrower/shorter than this")
     ap.add_argument("--min-area", type=int, default=30_000, help="discard crops below this pixel area")
     ap.add_argument("--max-aspect", type=float, default=8.0, help="discard extreme aspect ratios")
-    ap.add_argument("--include-tables", action="store_true", help="also export detected tables")
+    ap.add_argument(
+        "--include-tables",
+        action="store_true",
+        help="also crop detected tables into table/ (no TableFormer; cheap)",
+    )
     ap.add_argument("--ocr", action="store_true", help="enable OCR (slow; only for scanned PDFs)")
     ap.add_argument(
         "--device",
@@ -422,6 +439,7 @@ def main() -> int:
             base_url="https://openrouter.ai/api/v1",
             api_key=os.environ["OPENROUTER_API_KEY"],
         )
+        llm_config = LlmClassifyConfig()  # Use default config; can be customized if needed
 
     else:
         openai_client = None
@@ -485,14 +503,21 @@ def main() -> int:
             preds = classifier.predict([img for _, img in keep])
 
             for (crop, img), (raw_label, conf) in zip(keep, preds):
-                mapped_label, destination, decision_layer = route_docling(raw_label, conf, args.threshold)
+                if crop.kind == "table":
+                    # docling's layout model already identified this as a table;
+                    # trust it rather than the figure CNN, which is unreliable
+                    # at the table class.
+                    mapped_label = destination = "table"
+                    decision_layer = "docling"
+                else:
+                    mapped_label, destination, decision_layer = route_docling(raw_label, conf, args.threshold)
 
                 crop.raw_label = raw_label
                 crop.raw_confidence = round(conf, 4)
                 crop.mapped_label = mapped_label
 
-                if openai_client is not None:
-                    pred, cost, _err, _ = llm_classify_image(openai_client, img, log)
+                if openai_client is not None and crop.kind != "table":
+                    pred, cost, _err, _ = llm_classify_image(openai_client, img, llm_config, log)
                     if pred is not None:
                         crop.llm_label = pred["label"]
                         crop.llm_confidence = round(pred["confidence"], 4)
