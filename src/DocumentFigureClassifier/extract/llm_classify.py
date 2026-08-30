@@ -21,7 +21,6 @@ from openai import OpenAI, AsyncOpenAI
 
 from DocumentFigureClassifier.schemas import (
     LLM_CLASS_SCHEMA,
-    LLM_CLASS_SYSTEM_PROMPT,
     LlmClassifyConfig,
 )
 
@@ -111,7 +110,7 @@ def _request_kwargs(image: ImageInput, config: LlmClassifyConfig = DEFAULT_CONFI
         "max_tokens": config.max_tokens,
         "response_format":{"type": "json_schema", "json_schema": LLM_CLASS_SCHEMA},  # type: ignore
         "messages":[
-            {"role": "system", "content": LLM_CLASS_SYSTEM_PROMPT},
+            {"role": "system", "content": config.prompt},
             {
                 "role": "user",
                 "content": [
@@ -174,8 +173,8 @@ def image_to_data_url(image: ImageInput) -> str:
 async def async_llm_classify_image(
         client: AsyncOpenAI,
         image: ImageInput,
-        logger: Optional[Logger] = None,
         config: LlmClassifyConfig = DEFAULT_CONFIG,
+        logger: Optional[Logger] = None,
 ) -> tuple[Prediction | None, float | None, str | None, str | None]:
 
     try:
@@ -195,8 +194,8 @@ async def async_llm_classify_image(
 def llm_classify_image(
         client: OpenAI,
         image: ImageInput,
-        logger: Optional[Logger] = None,
         config: LlmClassifyConfig = DEFAULT_CONFIG,
+        logger: Optional[Logger] = None,
 ) -> tuple[Prediction | None, float | None, str | None, str | None]:
 
     try:
