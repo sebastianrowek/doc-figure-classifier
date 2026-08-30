@@ -37,4 +37,5 @@ Thumbs.db
 
 # Project local data
 data/
+models/
 *.log
