@@ -8,8 +8,8 @@ workflow and CLI calls.
 
 | File | What it does |
 |---|---|
-| `runner.py` | CLI. The paid step: classifies every calibration image (optionally N times) and writes `run.jsonl`, `run.meta.json`, and a `failures/` folder into a new run directory. |
-| `report.py` | CLI. The free step: reads a run directory, runs the metric blocks below, and writes `report.md`, `metrics.json`, `per_file.csv`, and `plots/`. Two registries (`BLOCKS`, `PLOTS`) decide what runs. |
+| `runner.py` | CLI. Step 1: Classifies every calibration image (optionally N times) via an LLM and writes `run.jsonl`, `run.meta.json`, and a `failures/` folder into a new run directory. |
+| `report.py` | CLI. Step 2: Reads a run directory, runs the metric blocks below, and writes `report.md`, `metrics.json`, `per_file.csv`, and `plots/`. Two registries (`BLOCKS`, `PLOTS`) decide what runs. |
 | `loader.py` | Defines the `run.jsonl` record schema and loads it into a tidy one-row-per-call DataFrame. The single place that knows the on-disk format. |
 | `overall.py` | Level 1 — overall accuracy (micro + macro), cost, confidence intervals, pooled over all calls. |
 | `per_class.py` | Level 2 — confusion matrix and precision / recall / F1 per class. |
@@ -17,4 +17,3 @@ workflow and CLI calls.
 | `calibration.py` | Threshold-free quality: cross-entropy / Brier / ECE and the reliability curve. |
 | `consistency.py` | Run-to-run stability across repeated calls (only meaningful with `--repeats > 1`). |
 | `plots.py` | Standalone plotting functions (confusion matrix, reliability, accuracy bars, ...); each takes a block result and writes a PNG. |
-| `__init__.py` | Package docstring and exports. |

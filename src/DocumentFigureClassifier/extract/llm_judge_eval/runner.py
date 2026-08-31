@@ -12,7 +12,11 @@ Every completed call is written -- successes *and* failures (``pred = null``,
 ``error`` set) -- so accuracy denominators and per-image repeat counts stay even.
 
 Example:
-    python -m DocumentFigureClassifier.extract.llm_judge_eval.runner --repeats 5 --max-concurrency 5
+    python -m DocumentFigureClassifier.extract.llm_judge_eval.runner --max-concurrency 5
+
+Args:
+    --model z-ai/glm-5.3-flash
+    
 """
 from __future__ import annotations
 
@@ -29,12 +33,20 @@ from dotenv import load_dotenv
 from openai import AsyncOpenAI
 
 from DocumentFigureClassifier.extract.llm_classify import DEFAULT_CONFIG, async_llm_classify_image
-from DocumentFigureClassifier.schemas import LlmJudgeCallResult
+from DocumentFigureClassifier.schemas import LlmJudgeCallResult, LlmClassifyConfig, CANDIDATE_MODELS
+from DocumentFigureClassifier.prompt import CLASSIFY_V1
 from DocumentFigureClassifier.taxonomy import TIER1_LABELS
 from DocumentFigureClassifier.constants import DEFAULT_LLM_JUDGE_DATA_DIR
 
 load_dotenv()
 log = logging.getLogger("judge_runner")
+
+# --- Eval identity: bump these by hand whenever the eval setup changes ---
+# EVAL_VERSION is recorded in run.meta.json so runs are grouped/compared by it.
+# ACTIVE_PROMPT selects which prompt version (from prompt.py) each call uses;
+# switching it counts as an eval change, so bump EVAL_VERSION at the same time.
+EVAL_VERSION = "v1.0"
+ACTIVE_PROMPT = CLASSIFY_V1
 
 IMG_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
@@ -68,6 +80,7 @@ async def _classify_once(
     call_idx: int,
     retries: int,
     fail_dir: Path,
+    config: LlmClassifyConfig,
 ) -> LlmJudgeCallResult:
     """One classification (with up to ``retries`` extra attempts on failure);
     append the final result line under the lock. If every attempt fails, dump the
@@ -76,7 +89,7 @@ async def _classify_once(
     attempt = 0
     while True:
         async with sem:
-            prediction, cost, error, raw = await async_llm_classify_image(client, path, logger=log)
+            prediction, cost, error, raw = await async_llm_classify_image(client, path, logger=log, config=config)
         if cost is not None:
             total_cost = (total_cost or 0.0) + cost
         if prediction is not None or attempt >= retries:
@@ -142,6 +155,8 @@ async def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=None,
                     help="run output directory (default: <data-dir>/_runs/run_<timestamp>); "
                          "holds run.jsonl, run.meta.json and failures/")
+    ap.add_argument("--model", choices=CANDIDATE_MODELS, default=DEFAULT_CONFIG.model,
+                    help="OpenRouter model slug (must be one of CANDIDATE_MODELS)")
     ap.add_argument("--repeats", type=int, default=1,
                     help="calls per image, to sample the judge's run-to-run variance")
     ap.add_argument("--max-concurrency", type=int, default=5,
@@ -153,6 +168,9 @@ async def main() -> None:
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+
+    # config for this run: CLI model + the hard-coded active prompt, over the defaults
+    config = dataclasses.replace(DEFAULT_CONFIG, model=args.model, prompt=ACTIVE_PROMPT)
 
     out_dir = args.out_dir or args.data_dir / "_runs" / f"run_{datetime.now():%Y%m%d_%H%M%S}"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -174,8 +192,9 @@ async def main() -> None:
     meta_path = out_dir / "run.meta.json"
     meta = {
         "started_at": datetime.now().isoformat(timespec="seconds"),
+        "eval_version": EVAL_VERSION,
         "out_dir": out_dir.name,
-        "config": dataclasses.asdict(DEFAULT_CONFIG),
+        "config": dataclasses.asdict(config),
         "run": {
             "n_images": len(images),
             "repeats": args.repeats,
@@ -200,7 +219,7 @@ async def main() -> None:
             max_retries=2,
         ) as client:
             tasks = [
-                _classify_once(client, sem, lock, fh, args.data_dir, cls, path, k, args.retries, fail_dir)
+                _classify_once(client, sem, lock, fh, args.data_dir, cls, path, k, args.retries, fail_dir, config)
                 for cls, path in images
                 for k in range(args.repeats)
             ]
