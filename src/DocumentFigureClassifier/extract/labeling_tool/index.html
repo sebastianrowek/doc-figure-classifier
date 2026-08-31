@@ -1,0 +1,852 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Figure Labeling Tool</title>
+<style>
+  :root {
+    --bg: #0f1216;
+    --panel: #171b21;
+    --panel-2: #1e242c;
+    --border: #2a323d;
+    --text: #e7ecf2;
+    --muted: #8b97a7;
+    --accent: #4f9cff;
+    --accent-dim: #24405f;
+    --good: #46c26b;
+    --good-dim: #1e4030;
+    --warn: #e0a53b;
+    --danger: #e5544b;
+    --shadow: 0 6px 22px rgba(0,0,0,.45);
+    font-size: 15px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  button {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 7px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type=text], select {
+    background: #0c0f13; border: 1px solid var(--border); border-radius: 7px;
+    padding: 6px 10px; min-width: 0;
+  }
+  input[type=text]:focus, select:focus { outline: none; border-color: var(--accent); }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #06121f; font-weight: 600; }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .btn-primary:disabled { background: var(--panel-2); color: var(--text); }
+
+  /* -------- top toolbar -------- */
+  header {
+    background: var(--panel); border-bottom: 1px solid var(--border);
+    padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; flex: none;
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .row .grow { flex: 1 1 260px; }
+  .field-label { color: var(--muted); font-size: .82rem; white-space: nowrap; }
+  .sep { flex: 1; }
+  .pill {
+    background: var(--panel-2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 4px 12px; font-size: .85rem; color: var(--muted);
+  }
+  .pill b { color: var(--text); }
+  #pendingPill.has-pending { border-color: var(--warn); color: var(--warn); }
+  #pendingPill.has-pending b { color: var(--warn); }
+  input[type=range] { accent-color: var(--accent); height: 22px; cursor: pointer; }
+  #threshSlider { flex: 0 1 220px; min-width: 120px; }
+  #threshNum {
+    width: 62px; color: #000; background: #fff;
+    border: 1px solid var(--border); border-radius: 7px; padding: 6px 8px;
+  }
+  #filterInfo.filtered { border-color: var(--accent); color: var(--accent); }
+  #filterInfo.filtered b { color: var(--accent); }
+  #status { font-size: .85rem; color: var(--muted); min-height: 1em; }
+  #status.err { color: var(--danger); }
+  #status.ok { color: var(--good); }
+
+  /* -------- main layout -------- */
+  main { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+  .viewer {
+    position: relative; display: flex; flex-direction: column;
+    min-width: 0; min-height: 0; padding: 14px; gap: 10px;
+  }
+  .stage {
+    flex: 1; min-height: 0; border: 1px solid var(--border); border-radius: 10px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    background:
+      linear-gradient(45deg, #1b2128 25%, transparent 25%) 0 0/24px 24px,
+      linear-gradient(-45deg, #1b2128 25%, transparent 25%) 0 0/24px 24px,
+      linear-gradient(45deg, transparent 75%, #1b2128 75%) 0 0/24px 24px,
+      linear-gradient(-45deg, transparent 75%, #1b2128 75%) 0 0/24px 24px,
+      #12161b;
+  }
+  .stage.bg-light { background: #f4f6f8; }
+  .stage.bg-dark  { background: #0c0f13; }
+  .stage img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .stage .empty { color: var(--muted); text-align: center; padding: 20px; }
+
+  .viewer-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .counter { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .fname { color: var(--muted); font-size: .85rem; word-break: break-all; }
+  .assigned-tag {
+    margin-left: auto; font-size: .85rem; font-weight: 600;
+    padding: 4px 12px; border-radius: 999px;
+  }
+  .assigned-tag.keep { background: var(--good-dim); color: var(--good); border: 1px solid var(--good); }
+  .assigned-tag.move { background: #4a3410; color: var(--warn); border: 1px solid var(--warn); }
+
+  .meta {
+    display: grid; grid-template-columns: auto 1fr; gap: 3px 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px; font-size: .84rem;
+  }
+  .meta dt { color: var(--muted); }
+  .meta dd { margin: 0; word-break: break-all; }
+
+  .progress { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+  .progress > div { height: 100%; background: var(--accent); width: 0; transition: width .12s; }
+
+  /* -------- sidebar / chips -------- */
+  aside {
+    background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; min-height: 0;
+  }
+  .aside-head { padding: 12px 12px 6px; }
+  .aside-head h2 { margin: 0; font-size: .95rem; }
+  .aside-head p { margin: 4px 0 0; font-size: .78rem; color: var(--muted); }
+  #chips { flex: 1; overflow-y: auto; padding: 8px 12px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .chip {
+    display: flex; align-items: center; gap: 8px; user-select: none;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); }
+  .chip.dragging { opacity: .5; border-style: dashed; }
+  .chip.assigned { background: #4a3410; border-color: var(--warn); }
+  .chip .grip { color: var(--muted); cursor: grab; font-size: .9rem; }
+  .chip .key {
+    background: #0c0f13; border: 1px solid var(--border); border-radius: 5px;
+    min-width: 22px; height: 22px; line-height: 20px; text-align: center;
+    font-size: .75rem; color: var(--muted); cursor: pointer; padding: 0 4px;
+  }
+  .chip .key:hover { border-color: var(--accent); color: var(--text); }
+  .chip .key.empty { color: #4a5666; }
+  .chip .key.listening {
+    border-color: var(--accent); color: var(--accent);
+    box-shadow: 0 0 0 2px var(--accent-dim); background: #0c0f13;
+  }
+  .chip.listening { border-color: var(--accent); }
+  .chip .name { flex: 1; font-weight: 600; word-break: break-word; }
+  .chip .cnt { color: var(--muted); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .keep-row { padding: 6px 12px 12px; display: flex; gap: 6px; }
+  #keepBtn { flex: 1; }
+  #undoBtn { flex: none; }
+
+  .help { padding: 10px 12px; border-top: 1px solid var(--border); font-size: .76rem; color: var(--muted); }
+  .help kbd {
+    background: #0c0f13; border: 1px solid var(--border); border-bottom-width: 2px;
+    border-radius: 4px; padding: 1px 6px; font-family: inherit; color: var(--text);
+  }
+  .help div { margin: 3px 0; }
+
+  /* -------- modal -------- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: none; align-items: center; justify-content: center; z-index: 50;
+  }
+  .overlay.show { display: flex; }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: var(--shadow); width: min(620px, 92vw); max-height: 86vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .modal h3 { margin: 0; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+  .modal .body { padding: 14px 16px; overflow-y: auto; }
+  .modal .foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+  .crumbs { font-size: .82rem; color: var(--muted); word-break: break-all; margin-bottom: 10px; }
+  .dirlist { display: flex; flex-direction: column; gap: 4px; }
+  .dir {
+    display: flex; justify-content: space-between; gap: 10px; align-items: center;
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+  }
+  .dir:hover { border-color: var(--accent); background: var(--panel-2); }
+  .dir .di-name::before { content: "📁 "; }
+  .dir.up .di-name::before { content: "⬆ "; }
+  .dir .di-cnt { color: var(--muted); font-size: .8rem; }
+  .report-line { margin: 4px 0; }
+  .report-line.warn { color: var(--warn); }
+  .report-line.ok { color: var(--good); }
+  code.mono { background: #0c0f13; padding: 1px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <span class="field-label">Root folder</span>
+    <input type="text" id="rootInput" class="grow" placeholder="Folder that holds the class subfolders" />
+    <button id="browseBtn">Browse…</button>
+    <button id="loadBtn" class="btn-primary">Load</button>
+  </div>
+  <div class="row">
+    <span class="field-label">Manifest</span>
+    <input type="text" id="manifestInput" class="grow" placeholder="Path to manifest.jsonl (optional)" />
+    <span class="field-label">Reviewing</span>
+    <select id="subSelect" disabled><option>—</option></select>
+    <span class="sep"></span>
+    <span class="pill" id="pendingPill">Pending: <b id="pendingCount">0</b></span>
+    <button id="commitBtn" class="btn-primary" disabled>Commit</button>
+  </div>
+  <div class="row">
+    <span class="field-label">Show confidence ≤</span>
+    <input type="range" id="threshSlider" min="0" max="1" step="0.01" value="1" />
+    <input type="number" id="threshNum" min="0" max="1" step="0.01" value="1.00" />
+    <button id="threshReset" title="Show all images">All</button>
+    <span class="sep"></span>
+    <span class="pill" id="filterInfo">—</span>
+  </div>
+  <div id="status"></div>
+</header>
+
+<main>
+  <section class="viewer">
+    <div class="stage" id="stage">
+      <div class="empty" id="stageEmpty">Select a root folder and a subfolder to begin.</div>
+      <img id="img" alt="" style="display:none" />
+    </div>
+    <div class="progress"><div id="progressBar"></div></div>
+    <div class="viewer-bar">
+      <span class="counter" id="counter">0 / 0</span>
+      <span class="fname" id="fname"></span>
+      <span class="assigned-tag keep" id="assignedTag" style="display:none"></span>
+    </div>
+    <dl class="meta" id="meta" style="display:none"></dl>
+  </section>
+
+  <aside>
+    <div class="aside-head">
+      <h2>Move to…</h2>
+      <p>Click a folder to reassign the current image and advance. Drag to reorder. Click a key badge to rebind its shortcut.</p>
+    </div>
+    <div id="chips"></div>
+    <div class="keep-row">
+      <button class="keep-btn" id="keepBtn">✓ Keep here &amp; next →</button>
+      <button id="undoBtn" title="Undo last change (Ctrl+Z)" disabled>↶ Undo</button>
+    </div>
+    <div class="help">
+      <div><kbd>←</kbd> / <kbd>→</kbd> previous / next (keep)</div>
+      <div><kbd>1</kbd>…<kbd>9</kbd> / letters — assign to a folder (click a badge to rebind)</div>
+      <div><kbd>Backspace</kbd> clear this image's assignment</div>
+      <div><kbd>Ctrl</kbd>+<kbd>Z</kbd> undo last change</div>
+      <div><kbd>B</kbd> cycle background</div>
+    </div>
+  </aside>
+</main>
+
+<!-- Browse modal -->
+<div class="overlay" id="browseOverlay">
+  <div class="modal">
+    <h3>Select root folder</h3>
+    <div class="body">
+      <div class="crumbs" id="crumbs"></div>
+      <div class="dirlist" id="dirlist"></div>
+    </div>
+    <div class="foot">
+      <button id="browseCancel">Cancel</button>
+      <button id="browseSelect" class="btn-primary">Use this folder</button>
+    </div>
+  </div>
+</div>
+
+<!-- Commit report modal -->
+<div class="overlay" id="reportOverlay">
+  <div class="modal">
+    <h3>Commit result</h3>
+    <div class="body" id="reportBody"></div>
+    <div class="foot"><button id="reportClose" class="btn-primary">Close</button></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const api = async (path) => {
+  const r = await fetch(path);
+  const j = await r.json();
+  if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
+  return j;
+};
+
+const state = {
+  root: "",
+  manifest: "",
+  folders: [],          // [{name, count}]
+  currentSub: null,
+  allImages: [],        // every image in the subfolder (with parsed .conf)
+  images: [],           // the filtered view actually shown
+  idx: 0,
+  threshold: 1,         // show images with confidence <= this
+  assignments: {},      // file -> { from, to }
+  order: [],            // chip order (folder names, excludes currentSub)
+  keymap: {},           // folder -> custom shortcut key (global per root)
+  listening: null,      // folder currently waiting for a new key binding
+  undo: [],             // stack of { file, prev, sub } for Ctrl+Z
+  bg: "checker",
+};
+
+/* ------------------------- persistence helpers ------------------------- */
+const LS = {
+  root: "figlabel:root",
+  manifest: "figlabel:manifest",
+  bg: "figlabel:bg",
+  order: (root, sub) => `figlabel:order:${root}|${sub}`,
+  keys: (root) => `figlabel:keys:${root}`,
+  thresh: "figlabel:thresh",
+};
+function saveOrder() {
+  try { localStorage.setItem(LS.order(state.root, state.currentSub), JSON.stringify(state.order)); } catch (e) {}
+}
+function saveKeys() {
+  try { localStorage.setItem(LS.keys(state.root), JSON.stringify(state.keymap)); } catch (e) {}
+}
+function loadKeys(folderNames) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS.keys(state.root)) || "null"); } catch (e) {}
+  const set = new Set(folderNames);
+  const map = {};
+  if (saved && typeof saved === "object")
+    for (const [folder, key] of Object.entries(saved)) if (set.has(folder)) map[folder] = key;
+  return map;
+}
+function loadOrder(folderNames) {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(LS.order(state.root, state.currentSub)) || "null"); } catch (e) {}
+  const set = new Set(folderNames);
+  const order = [];
+  if (Array.isArray(saved)) for (const n of saved) if (set.has(n)) { order.push(n); set.delete(n); }
+  for (const n of folderNames) if (set.has(n)) order.push(n);
+  return order;
+}
+
+/* ------------------------------ status -------------------------------- */
+function status(msg, kind = "") { const el = $("status"); el.textContent = msg; el.className = kind; }
+
+/* --------------------------- pending state ---------------------------- */
+function pendingList() {
+  return Object.entries(state.assignments)
+    .filter(([, a]) => a.to !== a.from)
+    .map(([file, a]) => ({ file, from: a.from, to: a.to }));
+}
+function refreshPending() {
+  const n = pendingList().length;
+  $("pendingCount").textContent = n;
+  $("pendingPill").classList.toggle("has-pending", n > 0);
+  $("commitBtn").disabled = n === 0;
+  $("undoBtn").disabled = state.undo.length === 0;
+}
+
+/* ----------------------------- folders -------------------------------- */
+async function loadFolders() {
+  const root = $("rootInput").value.trim();
+  if (!root) { status("Enter or browse to a root folder first.", "err"); return; }
+  status("Loading folders…");
+  try {
+    const j = await api("/api/folders?root=" + encodeURIComponent(root));
+    state.root = j.root;
+    $("rootInput").value = j.root;
+    state.folders = j.folders;
+    state.manifest = $("manifestInput").value.trim();
+    state.keymap = loadKeys(j.folders.map((f) => f.name));
+    try { localStorage.setItem(LS.root, j.root); localStorage.setItem(LS.manifest, state.manifest); } catch (e) {}
+
+    const sel = $("subSelect");
+    sel.innerHTML = "";
+    if (!j.folders.length) {
+      sel.innerHTML = "<option>— no subfolders —</option>"; sel.disabled = true;
+      status("No subfolders found in that root.", "err"); return;
+    }
+    for (const f of j.folders) {
+      const o = document.createElement("option");
+      o.value = f.name; o.textContent = `${f.name}  (${f.count})`;
+      sel.appendChild(o);
+    }
+    sel.disabled = false;
+    status(`Loaded ${j.folders.length} subfolders. Choose one to review.`, "ok");
+    // Auto-select the first non-empty folder, else the first.
+    const firstNonEmpty = j.folders.find((f) => f.count > 0) || j.folders[0];
+    sel.value = firstNonEmpty.name;
+    await selectSubfolder(firstNonEmpty.name);
+  } catch (e) {
+    status("Could not load folders: " + e.message, "err");
+  }
+}
+
+async function selectSubfolder(name) {
+  state.currentSub = name;
+  status(`Loading “${name}”…`);
+  try {
+    const url = "/api/images?root=" + encodeURIComponent(state.root) +
+      "&sub=" + encodeURIComponent(name) +
+      "&manifest=" + encodeURIComponent(state.manifest);
+    const j = await api(url);
+    state.allImages = j.images.map((im) => ({ ...im, conf: parseConf(im.file, im.meta) }));
+    state.idx = 0;
+    // Chips = every sibling folder except the one we're reviewing.
+    const dests = state.folders.map((f) => f.name).filter((n) => n !== name);
+    state.order = loadOrder(dests);
+    renderChips();
+    applyFilter();  // sets state.images + renders
+    const mf = j.manifest_found ? "" : "  (manifest not found — moves will still work, but manual_root won't be written)";
+    status(`Reviewing “${name}” — ${j.images.length} image(s).${mf}`, j.manifest_found ? "ok" : "");
+  } catch (e) {
+    status("Could not load images: " + e.message, "err");
+    state.allImages = []; state.images = []; applyFilter();
+  }
+}
+
+/* --------------------------- confidence filter ------------------------ */
+// The trailing number in "..__label__0.61.png" is the model confidence.
+// Fall back to the manifest's raw_confidence if the name has no number.
+function parseConf(file, meta) {
+  const m = file.match(/__(\d+(?:\.\d+)?)\.(?:png|jpe?g|webp|gif|bmp)$/i);
+  if (m) return parseFloat(m[1]);
+  if (meta && meta.raw_confidence != null) return Number(meta.raw_confidence);
+  return null;  // unknown -> never hidden by the filter
+}
+function passesFilter(im) {
+  return im.conf == null || im.conf <= state.threshold + 1e-9;
+}
+function applyFilter() {
+  const curFile = state.images[state.idx] ? state.images[state.idx].file : null;
+  state.images = state.allImages.filter(passesFilter);
+  // Keep the current image if it survived the filter, else clamp.
+  let ni = curFile ? state.images.findIndex((im) => im.file === curFile) : -1;
+  if (ni < 0) ni = Math.min(state.idx, state.images.length - 1);
+  state.idx = Math.max(0, ni);
+  refreshFilterInfo();
+  render();
+}
+function setThreshold(t) {
+  if (isNaN(t)) return;
+  state.threshold = Math.min(1, Math.max(0, t));
+  $("threshSlider").value = state.threshold;
+  $("threshNum").value = state.threshold.toFixed(2);
+  try { localStorage.setItem(LS.thresh, String(state.threshold)); } catch (e) {}
+  applyFilter();
+}
+function refreshFilterInfo() {
+  const all = state.allImages.length, shown = state.images.length;
+  const info = $("filterInfo");
+  const filtering = state.threshold < 0.999;
+  info.classList.toggle("filtered", filtering);
+  info.innerHTML = filtering
+    ? `Showing <b>${shown}</b> of ${all} &nbsp;(conf ≤ ${state.threshold.toFixed(2)})`
+    : `${all} image${all === 1 ? "" : "s"}`;
+}
+
+/* ------------------------------ viewer -------------------------------- */
+function folderCount(name) {
+  const f = state.folders.find((x) => x.name === name);
+  return f ? f.count : 0;
+}
+
+function render() {
+  const total = state.images.length;
+  const img = $("img"), empty = $("stageEmpty");
+  $("counter").textContent = total ? `${state.idx + 1} / ${total}` : "0 / 0";
+  $("progressBar").style.width = total ? `${((state.idx + 1) / total) * 100}%` : "0%";
+
+  if (!total) {
+    img.style.display = "none"; empty.style.display = "";
+    empty.textContent = !state.currentSub
+      ? "Select a root folder and a subfolder to begin."
+      : state.allImages.length
+        ? `No images at confidence ≤ ${state.threshold.toFixed(2)} in this folder.`
+        : "This folder has no images.";
+    $("fname").textContent = ""; $("meta").style.display = "none";
+    $("assignedTag").style.display = "none";
+    renderChips(); return;
+  }
+
+  const cur = state.images[state.idx];
+  empty.style.display = "none"; img.style.display = "";
+  img.src = "/img?root=" + encodeURIComponent(state.root) +
+    "&sub=" + encodeURIComponent(state.currentSub) +
+    "&file=" + encodeURIComponent(cur.file);
+  $("fname").textContent = cur.file;
+
+  // Assignment tag
+  const a = state.assignments[cur.file];
+  const tag = $("assignedTag");
+  if (a && a.to !== a.from) {
+    tag.style.display = ""; tag.className = "assigned-tag move";
+    tag.textContent = "→ will move to " + a.to;
+  } else {
+    tag.style.display = ""; tag.className = "assigned-tag keep";
+    tag.textContent = "✓ stays in " + state.currentSub;
+  }
+
+  // Metadata
+  const m = cur.meta || {};
+  const rows = [];
+  const add = (k, v) => { if (v !== null && v !== undefined && v !== "") rows.push([k, v]); };
+  add("Source", m.source_pdf);
+  add("Page", m.page);
+  if (m.width && m.height) add("Size", `${m.width} × ${m.height}`);
+  add("Routed to", m.routed_to);
+  if (m.manual_root) add("Manual root", m.manual_root);
+  add("Raw label", m.raw_label);
+  if (m.raw_confidence != null) add("Raw conf.", Number(m.raw_confidence).toFixed(3));
+  add("LLM label", m.llm_label);
+  if (!m.in_manifest) add("Manifest", "not found for this file");
+  const meta = $("meta");
+  if (rows.length) {
+    meta.style.display = "";
+    meta.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join("");
+  } else { meta.style.display = "none"; }
+
+  preload(state.idx + 1);
+  renderChips();
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+function preload(i) {
+  if (i < 0 || i >= state.images.length) return;
+  const im = new Image();
+  im.src = "/img?root=" + encodeURIComponent(state.root) +
+    "&sub=" + encodeURIComponent(state.currentSub) +
+    "&file=" + encodeURIComponent(state.images[i].file);
+}
+
+/* ------------------------------ chips --------------------------------- */
+// The shortcut shown/used for a folder: an explicit custom binding wins;
+// otherwise the folder falls back to its 1-9 position (unless that digit was
+// claimed as someone else's custom key).
+function effectiveKey(name, index) {
+  if (state.keymap[name]) return state.keymap[name];
+  if (index < 9) {
+    const d = String(index + 1);
+    if (!Object.values(state.keymap).includes(d)) return d;
+  }
+  return "";
+}
+// Which folder a pressed key maps to (custom bindings first, then position).
+function resolveFolder(rawKey) {
+  const key = rawKey.length === 1 ? rawKey.toLowerCase() : rawKey;
+  for (const name of state.order) if (state.keymap[name] === key) return name;
+  if (/^[1-9]$/.test(key)) {
+    const name = state.order[+key - 1];
+    if (name && !state.keymap[name] && !Object.values(state.keymap).includes(key)) return name;
+  }
+  return null;
+}
+
+function renderChips() {
+  const wrap = $("chips");
+  wrap.innerHTML = "";
+  const cur = state.images[state.idx];
+  const assignedTo = cur ? (state.assignments[cur.file] || {}).to : null;
+
+  state.order.forEach((name, i) => {
+    const chip = document.createElement("div");
+    const listening = state.listening === name;
+    chip.className = "chip" + (assignedTo === name ? " assigned" : "") + (listening ? " listening" : "");
+    chip.draggable = true;
+    chip.dataset.name = name;
+    const key = effectiveKey(name, i);
+    const keyCls = "key" + (listening ? " listening" : (key ? "" : " empty"));
+    const keyLabel = listening ? "?" : (key || "＋");
+    chip.innerHTML =
+      `<span class="grip">⋮⋮</span>` +
+      `<span class="${keyCls}" title="Click to rebind this folder's shortcut">${escapeHtml(keyLabel)}</span>` +
+      `<span class="name">${escapeHtml(name)}</span>` +
+      `<span class="cnt">${folderCount(name)}</span>`;
+    chip.addEventListener("click", () => onChipClick(name));
+    chip.querySelector(".key").addEventListener("click", (e) => { e.stopPropagation(); startListening(name); });
+    chip.addEventListener("dragstart", () => chip.classList.add("dragging"));
+    chip.addEventListener("dragend", onDragEnd);
+    wrap.appendChild(chip);
+  });
+}
+
+function onChipClick(name) {
+  if (state.listening) { state.listening = null; renderChips(); return; }
+  const cur = state.images[state.idx];
+  if (!cur) return;
+  const existing = state.assignments[cur.file];
+  if (existing && existing.to === name) {
+    // toggle off -> keep in current folder, stay put so the change is visible
+    setAssignment(cur.file, null); render();
+  } else {
+    setAssignment(cur.file, { from: state.currentSub, to: name }); next();
+  }
+}
+
+/* --------------------- rebinding folder shortcuts --------------------- */
+function startListening(name) {
+  state.listening = name;
+  renderChips();
+  status(`Press a letter or number to bind to “${name}” — Esc to cancel, Backspace to clear.`);
+}
+function handleBindingKey(e) {
+  const name = state.listening;
+  e.preventDefault();
+  if (e.key === "Escape") { state.listening = null; renderChips(); status(""); return; }
+  if (e.key === "Backspace" || e.key === "Delete") {
+    delete state.keymap[name]; saveKeys(); state.listening = null; renderChips();
+    status(`Cleared shortcut for “${name}”.`, "ok"); return;
+  }
+  if (e.key.length === 1 && /^[a-z0-9]$/i.test(e.key)) {
+    const key = e.key.toLowerCase();
+    // Keys are unique: strip it from whoever else held it.
+    for (const f of Object.keys(state.keymap)) if (state.keymap[f] === key) delete state.keymap[f];
+    state.keymap[name] = key; saveKeys(); state.listening = null; renderChips();
+    status(`Bound “${key}” to “${name}”.`, "ok"); return;
+  }
+  // ignore modifiers / unsupported keys, keep listening
+}
+
+/* drag-reorder (DOM-based so the native drag stays alive) */
+$("chips").addEventListener("dragover", (e) => {
+  e.preventDefault();
+  const wrap = $("chips");
+  const dragging = wrap.querySelector(".chip.dragging");
+  if (!dragging) return;
+  const after = dragAfter(wrap, e.clientY);
+  if (after == null) wrap.appendChild(dragging);
+  else wrap.insertBefore(dragging, after);
+});
+function dragAfter(wrap, y) {
+  const els = [...wrap.querySelectorAll(".chip:not(.dragging)")];
+  let best = { offset: -Infinity, el: null };
+  for (const child of els) {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > best.offset) best = { offset, el: child };
+  }
+  return best.el;
+}
+function onDragEnd(e) {
+  e.target.classList.remove("dragging");
+  state.order = [...$("chips").querySelectorAll(".chip")].map((c) => c.dataset.name);
+  saveOrder();
+  renderChips();
+}
+
+/* --------------------- assignment + undo ------------------------------ */
+// Single choke point for every change to state.assignments, so each one can
+// be undone. `value` is { from, to } or null (= keep in place).
+function setAssignment(file, value) {
+  const prev = state.assignments[file] ? { ...state.assignments[file] } : null;
+  const same = JSON.stringify(prev) === JSON.stringify(value || null);
+  if (same) return false;
+  state.undo.push({ file, prev, sub: state.currentSub });
+  if (value) state.assignments[file] = value; else delete state.assignments[file];
+  refreshPending();
+  return true;
+}
+function undo() {
+  const e = state.undo.pop();
+  if (!e) { status("Nothing to undo.", ""); refreshPending(); return; }
+  if (e.prev) state.assignments[e.file] = e.prev; else delete state.assignments[e.file];
+  refreshPending();
+  if (e.sub === state.currentSub) {
+    const i = state.images.findIndex((im) => im.file === e.file);
+    if (i >= 0) state.idx = i;
+    render();
+    status(`Undid change to ${e.file}.`, "");
+  } else {
+    render();
+    status(`Undid change to ${e.file} (in “${e.sub}”).`, "");
+  }
+}
+
+/* --------------------------- navigation ------------------------------- */
+function next() { if (state.idx < state.images.length - 1) { state.idx++; render(); } else { render(); } }
+function prev() { if (state.idx > 0) { state.idx--; render(); } }
+function keepAndNext() {
+  const cur = state.images[state.idx];
+  if (cur) setAssignment(cur.file, null);
+  next();
+}
+function clearAssignment() {
+  const cur = state.images[state.idx];
+  if (cur && setAssignment(cur.file, null)) render();
+}
+
+/* ------------------------------ commit -------------------------------- */
+async function commit() {
+  const moves = pendingList();
+  if (!moves.length) return;
+  if (!confirm(`Move ${moves.length} image(s) to their new folders and update the manifest?`)) return;
+  status("Committing…");
+  $("commitBtn").disabled = true;
+  try {
+    const r = await fetch("/api/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root: state.root, manifest: state.manifest, moves }),
+    });
+    const rep = await r.json();
+    if (!r.ok || rep.error) throw new Error(rep.error || ("HTTP " + r.status));
+    // Drop committed assignments that actually moved.
+    const movedSet = new Set(rep.moved.map((m) => m.file));
+    for (const file of Object.keys(state.assignments)) if (movedSet.has(file)) delete state.assignments[file];
+    state.undo = [];  // moved files are on disk now; can't undo via the in-memory stack
+    showReport(rep);
+    // Reload counts + current folder to reflect the moves.
+    const keepSub = state.currentSub;
+    await loadFolders();
+    if (state.folders.some((f) => f.name === keepSub)) { $("subSelect").value = keepSub; await selectSubfolder(keepSub); }
+  } catch (e) {
+    status("Commit failed: " + e.message, "err");
+  } finally {
+    refreshPending();
+  }
+}
+
+function showReport(rep) {
+  const b = $("reportBody");
+  const lines = [];
+  lines.push(`<div class="report-line ok">✔ Moved ${rep.moved.length} file(s).</div>`);
+  if (rep.manifest_written)
+    lines.push(`<div class="report-line ok">✔ Updated <code class="mono">manual_root</code> on ${rep.manifest_updated} manifest record(s).</div>`);
+  else if (rep.manifest_path)
+    lines.push(`<div class="report-line warn">⚠ Manifest not updated (file not found or no matching records).</div>`);
+  if (rep.manifest_no_record && rep.manifest_no_record.length)
+    lines.push(`<div class="report-line warn">⚠ ${rep.manifest_no_record.length} moved file(s) had no manifest record.</div>`);
+  if (rep.skipped && rep.skipped.length) {
+    lines.push(`<div class="report-line warn">⚠ Skipped ${rep.skipped.length}:</div>`);
+    for (const s of rep.skipped) lines.push(`<div class="report-line warn">&nbsp;&nbsp;• ${escapeHtml(s.file)} — ${escapeHtml(s.reason)}</div>`);
+  }
+  b.innerHTML = lines.join("");
+  $("reportOverlay").classList.add("show");
+  status(`Committed: ${rep.moved.length} moved, ${rep.manifest_updated} manifest record(s) updated.`, "ok");
+}
+
+/* --------------------------- browse modal ----------------------------- */
+let browseCurrent = "";
+async function openBrowse(startPath) {
+  await browseTo(startPath || $("rootInput").value.trim() || "");
+  $("browseOverlay").classList.add("show");
+}
+async function browseTo(path) {
+  try {
+    const j = await api("/api/listdir?path=" + encodeURIComponent(path || ""));
+    browseCurrent = j.path;
+    $("crumbs").textContent = j.path;
+    const list = $("dirlist");
+    list.innerHTML = "";
+    if (j.parent) {
+      const up = document.createElement("div");
+      up.className = "dir up";
+      up.innerHTML = `<span class="di-name">.. (parent)</span>`;
+      up.addEventListener("click", () => browseTo(j.parent));
+      list.appendChild(up);
+    }
+    for (const d of j.dirs) {
+      const row = document.createElement("div");
+      row.className = "dir";
+      row.innerHTML = `<span class="di-name">${escapeHtml(d.name)}</span><span class="di-cnt">${d.images} img</span>`;
+      row.addEventListener("click", () => browseTo(j.path.replace(/[\\/]$/, "") + "/" + d.name));
+      list.appendChild(row);
+    }
+    if (!j.dirs.length) list.innerHTML += `<div class="crumbs">(no subfolders here)</div>`;
+  } catch (e) {
+    $("dirlist").innerHTML = `<div class="report-line warn">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+/* --------------------------- background -------------------------------- */
+function cycleBg() {
+  const seq = ["checker", "light", "dark"];
+  state.bg = seq[(seq.indexOf(state.bg) + 1) % seq.length];
+  applyBg();
+  try { localStorage.setItem(LS.bg, state.bg); } catch (e) {}
+}
+function applyBg() {
+  const s = $("stage");
+  s.classList.toggle("bg-light", state.bg === "light");
+  s.classList.toggle("bg-dark", state.bg === "dark");
+}
+
+/* ------------------------------ events -------------------------------- */
+$("loadBtn").addEventListener("click", loadFolders);
+$("rootInput").addEventListener("keydown", (e) => { if (e.key === "Enter") loadFolders(); });
+$("subSelect").addEventListener("change", (e) => selectSubfolder(e.target.value));
+$("commitBtn").addEventListener("click", commit);
+$("keepBtn").addEventListener("click", keepAndNext);
+$("undoBtn").addEventListener("click", undo);
+$("threshSlider").addEventListener("input", (e) => setThreshold(parseFloat(e.target.value)));
+$("threshNum").addEventListener("input", (e) => setThreshold(parseFloat(e.target.value)));
+$("threshReset").addEventListener("click", () => setThreshold(1));
+$("browseBtn").addEventListener("click", () => openBrowse());
+$("browseCancel").addEventListener("click", () => $("browseOverlay").classList.remove("show"));
+$("browseSelect").addEventListener("click", () => {
+  $("rootInput").value = browseCurrent;
+  $("browseOverlay").classList.remove("show");
+  loadFolders();
+});
+$("reportClose").addEventListener("click", () => $("reportOverlay").classList.remove("show"));
+[$("browseOverlay"), $("reportOverlay")].forEach((o) =>
+  o.addEventListener("click", (e) => { if (e.target === o) o.classList.remove("show"); }));
+
+document.addEventListener("keydown", (e) => {
+  // Waiting to capture a new shortcut for a folder -> swallow the next key.
+  if (state.listening) { handleBindingKey(e); return; }
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+  if ($("browseOverlay").classList.contains("show") || $("reportOverlay").classList.contains("show")) {
+    if (e.key === "Escape") { $("browseOverlay").classList.remove("show"); $("reportOverlay").classList.remove("show"); }
+    return;
+  }
+  // Undo (Ctrl/Cmd+Z). Leave other modifier combos to the browser.
+  if ((e.ctrlKey || e.metaKey) && (e.key === "z" || e.key === "Z") && !e.shiftKey) { e.preventDefault(); undo(); return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+  // Folder shortcuts (custom bindings + 1-9 by position) take priority.
+  const folder = resolveFolder(e.key);
+  if (folder) { e.preventDefault(); onChipClick(folder); return; }
+
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); next(); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); prev(); }
+  else if (e.key === "Backspace" || e.key === "Delete") { e.preventDefault(); clearAssignment(); }
+  else if (e.key === "b" || e.key === "B") { cycleBg(); }
+});
+
+/* ------------------------------- init --------------------------------- */
+async function init() {
+  try {
+    const d = await api("/api/defaults");
+    let root = "", manifest = "";
+    try { root = localStorage.getItem(LS.root) || ""; manifest = localStorage.getItem(LS.manifest) || ""; } catch (e) {}
+    $("rootInput").value = root || d.root || "";
+    $("manifestInput").value = manifest || d.manifest || "";
+    try { state.bg = localStorage.getItem(LS.bg) || "checker"; } catch (e) {}
+    applyBg();
+    let t = 1;
+    try { const s = localStorage.getItem(LS.thresh); if (s != null) t = parseFloat(s); } catch (e) {}
+    state.threshold = isNaN(t) ? 1 : Math.min(1, Math.max(0, t));
+    $("threshSlider").value = state.threshold;
+    $("threshNum").value = state.threshold.toFixed(2);
+    refreshFilterInfo();
+    if ($("rootInput").value) loadFolders();
+  } catch (e) {
+    status("Server not reachable: " + e.message, "err");
+  }
+  refreshPending();
+}
+init();
+</script>
+</body>
+</html>
