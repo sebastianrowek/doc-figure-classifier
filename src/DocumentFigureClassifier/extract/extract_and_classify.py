@@ -52,10 +52,11 @@ Useful flags on CPU:
     --scale 3.0       higher render resolution; use if waterfall connector
                       lines look faint in the crops
     --include-tables  also crop detected tables into the table/ folder. Cheap:
-                      it renders page images so the table regions can be
-                      cropped, but does NOT run TableFormer (cell-structure
-                      recognition) -- this pipeline only wants the crop, not
-                      the grid.
+                      docling's layout model locates the tables and each region
+                      is rendered straight from the PDF with PyMuPDF. It does
+                      NOT run TableFormer (cell-structure recognition), nor hold
+                      whole-page rasters in memory -- this pipeline only wants
+                      the crop, not the grid.
     --limit N         process at most N PDFs
 
 Performance
@@ -109,6 +110,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from openai import OpenAI, AsyncOpenAI
+import pymupdf
 import torch
 import torchvision.transforms as transforms
 from PIL import Image
@@ -117,7 +119,8 @@ from transformers import EfficientNetForImageClassification
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
-from docling_core.types.doc.items.picture.picture import PictureItem 
+from docling_core.types.doc.base import BoundingBox
+from docling_core.types.doc.items.picture.picture import PictureItem
 from docling_core.types.doc.items.table.table import TableItem
 
 # Moved between modules across docling 2.x releases; older builds have neither.
@@ -232,15 +235,16 @@ def build_converter(
     ocr: bool,
     device: str,
     threads: int | None,
-    do_tables: bool,
 ) -> DocumentConverter:
     opts = PdfPipelineOptions()
     opts.images_scale = scale  # 1.0 == 72 dpi; 2.0 ~ 144 dpi
     opts.generate_picture_images = True
-    # Tables have no per-item image cache (the old generate_table_images is
-    # deprecated), so they must be cropped from the rendered page raster --
-    # only needed when we actually export tables.
-    opts.generate_page_images = do_tables
+    # Deliberately OFF. Turning it on would hold a full-page raster for *every*
+    # page of the document in memory at once (~6 MB/page at scale 2.0), which
+    # OOMs a long report on an 8 GB machine. Table crops don't need it: their
+    # regions are rendered on demand from the PDF with PyMuPDF -- see
+    # render_table_region / extract_crops.
+    opts.generate_page_images = False
     opts.do_ocr = ocr  # annual reports are usually digital -> off is much faster
     # TableFormer (cell-structure recognition) is the expensive stage and this
     # pipeline never reads table.data -- we only keep the crop as an image. The
@@ -281,51 +285,94 @@ def is_junk(img: Image.Image, min_side: int, min_area: int, max_aspect: float) -
     return None
 
 
+def render_table_region(
+    pdf_doc: pymupdf.Document,
+    page_no: int,
+    bbox: BoundingBox,
+    scale: float,
+) -> Image.Image | None:
+    """Render one table region straight from the PDF.
+
+    docling has no per-table image cache, and turning on generate_page_images to
+    let TableItem.get_image() work would hold a full-page raster for every page
+    of the document at once -- OOM territory on an 8 GB box for a long report.
+    Rendering just this one region on demand costs a few MB that is freed
+    immediately, so memory stays flat regardless of document length.
+    """
+    try:
+        page = pdf_doc[page_no - 1]  # docling pages are 1-based, PyMuPDF 0-based
+    except (IndexError, RuntimeError):
+        return None
+    # docling stores the bbox bottom-left (PDF native); PyMuPDF wants top-left.
+    tl = bbox.to_top_left_origin(page_height=page.rect.height)
+    rect = pymupdf.Rect(min(tl.l, tl.r), min(tl.t, tl.b), max(tl.l, tl.r), max(tl.t, tl.b))
+    rect &= page.rect  # clip to the visible page
+    if rect.is_empty:
+        return None
+    pix = page.get_pixmap(matrix=pymupdf.Matrix(scale, scale), clip=rect, alpha=False)
+    return Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+
+
 def extract_crops(
     pdf_path: Path,
     converter: DocumentConverter,
     include_tables: bool,
+    scale: float,
 ) -> list[tuple[Crop, Image.Image]]:
     """Run docling on one PDF and yield (metadata, PIL image) pairs."""
     result = converter.convert(str(pdf_path))
     doc = result.document
     out: list[tuple[Crop, Image.Image]] = []
     counter = 0
+    pdf_doc: pymupdf.Document | None = None  # opened lazily, only if tables are found
 
-    for element, _level in doc.iterate_items():
-        if isinstance(element, PictureItem):
-            kind = "picture"
-        elif include_tables and isinstance(element, TableItem):
-            kind = "table"
-        else:
-            continue
+    try:
+        for element, _level in doc.iterate_items():
+            if isinstance(element, PictureItem):
+                kind = "picture"
+            elif include_tables and isinstance(element, TableItem):
+                kind = "table"
+            else:
+                continue
 
-        try:
-            img = element.get_image(doc)
-        except Exception as exc:  # noqa: BLE001 - one bad figure must not kill the run
-            log.warning("%s: could not render %s: %s", pdf_path.name, kind, exc)
-            continue
-        if img is None:
-            continue
+            page, bbox = None, None
+            if element.prov:
+                prov = element.prov[0]
+                page = prov.page_no
+                b = prov.bbox
+                bbox = [b.l, b.t, b.r, b.b]
 
-        page, bbox = None, None
-        if element.prov:
-            prov = element.prov[0]
-            page = prov.page_no
-            b = prov.bbox
-            bbox = [b.l, b.t, b.r, b.b]
+            if kind == "picture":
+                # generate_picture_images=True cached the crop on the item.
+                try:
+                    img = element.get_image(doc)
+                except Exception as exc:  # noqa: BLE001 - one bad figure must not kill the run
+                    log.warning("%s: could not render picture: %s", pdf_path.name, exc)
+                    continue
+            else:  # table: render the region from the PDF (keeps memory bounded)
+                if page is None:
+                    continue
+                if pdf_doc is None:
+                    pdf_doc = pymupdf.open(str(pdf_path))
+                img = render_table_region(pdf_doc, page, prov.bbox, scale)
 
-        counter += 1
-        crop = Crop(
-            crop_id=f"{pdf_path.stem}__p{page or 0:03d}__{counter:03d}",
-            source_pdf=pdf_path.name,
-            page=page or 0,
-            kind=kind,
-            width=img.width,
-            height=img.height,
-            bbox=bbox,
-        )
-        out.append((crop, img.convert("RGB")))
+            if img is None:
+                continue
+
+            counter += 1
+            crop = Crop(
+                crop_id=f"{pdf_path.stem}__p{page or 0:03d}__{counter:03d}",
+                source_pdf=pdf_path.name,
+                page=page or 0,
+                kind=kind,
+                width=img.width,
+                height=img.height,
+                bbox=bbox,
+            )
+            out.append((crop, img.convert("RGB")))
+    finally:
+        if pdf_doc is not None:
+            pdf_doc.close()
 
     return out
 
@@ -468,7 +515,6 @@ def main() -> int:
         args.ocr,
         args.device,
         args.threads,
-        do_tables=args.include_tables,
     )
     classifier = FigureClassifier(args.model_dir, threads=args.threads)
 
@@ -482,7 +528,7 @@ def main() -> int:
         for n, pdf in enumerate(pdfs, 1):
             log.info("[%d/%d] %s", n, len(pdfs), pdf.name)
             try:
-                crops = extract_crops(pdf, converter, args.include_tables)
+                crops = extract_crops(pdf, converter, args.include_tables, args.scale)
             except Exception as exc:  # noqa: BLE001
                 log.error("  failed: %s", exc)
                 continue

@@ -38,12 +38,12 @@ python -m DocumentFigureClassifier.extract.extract_and_classify ./reports ./out 
 
 - `--limit 3` — only the first 3 PDFs. Always smoke-test before a full run.
 - `--threshold 0.75` — crops below this confidence go to `_review/`.
-- `--include-tables` — also crop detected tables into `table/`. Cheap: it
-  renders page images so the table regions can be cropped, but does **not**
-  run TableFormer (cell-structure recognition) — we only want the crop, not
-  the grid. Table crops skip the figure classifier and the LLM layer and go
-  straight to `table/`, because docling's layout label is more reliable than
-  the CNN at the table class.
+- `--include-tables` — also crop detected tables into `table/`. Cheap:
+  docling's layout model locates the tables and each region is rendered
+  straight from the PDF with PyMuPDF (no TableFormer, no whole-page rasters
+  held in memory). Table crops skip the figure classifier and the LLM layer
+  and go straight to `table/`, because docling's layout label is more reliable
+  than the CNN at the table class.
 
 Output layout under `./out`:
 
