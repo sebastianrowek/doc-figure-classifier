@@ -60,6 +60,21 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _root_manifest_mismatch(root: Path, manifest: Path | None) -> bool:
+    """True when an existing manifest lives outside ``root``'s dataset folder.
+
+    Commits move files under ``root`` and stamp ``manual_root`` onto the matching
+    records in ``manifest``. If the two belong to different dataset trees (e.g. a
+    ``data/parsed`` manifest paired with a ``data/parsed_new/review`` root), none
+    of the moved filenames exist in the manifest -- so nothing is written and the
+    moves silently lose their labels. Callers surface this as a warning. A missing
+    manifest returns False; that case is reported separately as "not found".
+    """
+    if manifest is None or not manifest.is_file():
+        return False
+    return not _is_within(root, manifest.parent)
+
+
 def _count_images(folder: Path) -> int:
     try:
         return sum(1 for p in folder.iterdir() if p.suffix.lower() in IMAGE_EXTS and p.is_file())
@@ -104,6 +119,7 @@ def do_commit(payload: dict) -> dict:
         "manifest_no_record": [],
         "manifest_path": str(manifest) if manifest else None,
         "manifest_written": False,
+        "root_manifest_mismatch": _root_manifest_mismatch(root, manifest),
     }
     successful: dict[str, str] = {}  # filename -> destination folder
 
@@ -320,11 +336,21 @@ class Handler(BaseHTTPRequestHandler):
                     },
                 }
             )
+        mismatch = _root_manifest_mismatch(root, manifest)
+        warning = None
+        if mismatch:
+            warning = (
+                f"Manifest lives outside this root's folder ({manifest.parent}). "
+                f"Moves under {root} won't match its records, so manual_root "
+                "won't be written. Pick the manifest.jsonl that belongs to this root."
+            )
         self._send_json(
             {
                 "sub": sub,
                 "images": images,
                 "manifest_found": manifest is not None and manifest.is_file(),
+                "root_manifest_mismatch": mismatch,
+                "warning": warning,
             }
         )
 
@@ -379,6 +405,9 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Figure labeling tool running at {url}")
     print(f"  root folder : {DEFAULT_ROOT}")
     print(f"  manifest    : {DEFAULT_MANIFEST}")
+    if _root_manifest_mismatch(DEFAULT_ROOT, DEFAULT_MANIFEST):
+        print("  WARNING: the manifest is outside the root's folder -- commits here")
+        print("           won't update it. Pass --manifest for this root's manifest.jsonl.")
     print("Press Ctrl+C to stop.")
 
     if not args.no_browser:

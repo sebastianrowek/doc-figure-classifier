@@ -89,6 +89,13 @@ now lives in (or its `manual_root`) as the corrected ground truth.
 - The manifest normally sits one level **above** the class folders
   (`data/parsed/manifest.jsonl` vs `data/parsed/review/`); the tool handles that
   because the manifest path is configured independently of the root.
+- Because root and manifest are configured independently, it's possible to pair
+  a root with a manifest from a **different** dataset (e.g. a `data/parsed_new`
+  root with the `data/parsed` manifest). Then the moved filenames match no
+  records and `manual_root` is silently never written. The tool now warns about
+  this — on startup, in the status line when you load a folder, in the commit
+  confirmation, and in the commit report — whenever the manifest lives outside
+  the root's own dataset folder.
 - If the manifest can't be found, moves still happen — only the `manual_root`
   write is skipped, and the commit report says so.
 - It's a local, single-user tool: it binds to localhost and reads/writes files

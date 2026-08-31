@@ -71,6 +71,7 @@
   #status { font-size: .85rem; color: var(--muted); min-height: 1em; }
   #status.err { color: var(--danger); }
   #status.ok { color: var(--good); }
+  #status.warn { color: var(--warn); }
 
   /* -------- main layout -------- */
   main { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
@@ -300,6 +301,7 @@ const state = {
   listening: null,      // folder currently waiting for a new key binding
   undo: [],             // stack of { file, prev, sub } for Ctrl+Z
   bg: "checker",
+  rootManifestMismatch: false,  // manifest lives outside this root's dataset folder
 };
 
 /* ------------------------- persistence helpers ------------------------- */
@@ -404,8 +406,14 @@ async function selectSubfolder(name) {
     state.order = loadOrder(dests);
     renderChips();
     applyFilter();  // sets state.images + renders
-    const mf = j.manifest_found ? "" : "  (manifest not found — moves will still work, but manual_root won't be written)";
-    status(`Reviewing “${name}” — ${j.images.length} image(s).${mf}`, j.manifest_found ? "ok" : "");
+    state.rootManifestMismatch = !!j.root_manifest_mismatch;
+    if (j.root_manifest_mismatch) {
+      status("⚠ " + (j.warning || "Manifest is outside this root's folder — commits won't update it."), "warn");
+    } else if (!j.manifest_found) {
+      status(`Reviewing “${name}” — ${j.images.length} image(s).  (manifest not found — moves will still work, but manual_root won't be written)`, "");
+    } else {
+      status(`Reviewing “${name}” — ${j.images.length} image(s).`, "ok");
+    }
   } catch (e) {
     status("Could not load images: " + e.message, "err");
     state.allImages = []; state.images = []; applyFilter();
@@ -689,7 +697,13 @@ function clearAssignment() {
 async function commit() {
   const moves = pendingList();
   if (!moves.length) return;
-  if (!confirm(`Move ${moves.length} image(s) to their new folders and update the manifest?`)) return;
+  let prompt = `Move ${moves.length} image(s) to their new folders and update the manifest?`;
+  if (state.rootManifestMismatch) {
+    prompt = "⚠ WARNING: the selected manifest is outside this root's folder, so " +
+      "manual_root will NOT be written for these moves — the files move but their " +
+      "labels are lost from the manifest.\n\n" + prompt;
+  }
+  if (!confirm(prompt)) return;
   status("Committing…");
   $("commitBtn").disabled = true;
   try {
@@ -720,6 +734,8 @@ function showReport(rep) {
   const b = $("reportBody");
   const lines = [];
   lines.push(`<div class="report-line ok">✔ Moved ${rep.moved.length} file(s).</div>`);
+  if (rep.root_manifest_mismatch)
+    lines.push(`<div class="report-line warn">⚠ The manifest is outside this root's folder — its records don't match the moved files, so <code class="mono">manual_root</code> was not written. Select the manifest.jsonl that belongs to this root.</div>`);
   if (rep.manifest_written)
     lines.push(`<div class="report-line ok">✔ Updated <code class="mono">manual_root</code> on ${rep.manifest_updated} manifest record(s).</div>`);
   else if (rep.manifest_path)
