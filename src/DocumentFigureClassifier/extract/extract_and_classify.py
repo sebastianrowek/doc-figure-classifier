@@ -519,6 +519,16 @@ def main() -> int:
     classifier = FigureClassifier(args.model_dir, threads=args.threads)
 
     manifest_path = args.output / "manifest.jsonl"
+    # The open("w") below truncates the manifest. A restarted run that only
+    # re-processes some PDFs would otherwise wipe every record from the earlier
+    # run (the crop images survive, but their metadata is gone). Stash a
+    # timestamped copy first so such a mistake is always recoverable.
+    if manifest_path.is_file() and manifest_path.stat().st_size > 0:
+        backup_path = manifest_path.with_name(
+            f"manifest.{time.strftime('%Y%m%d-%H%M%S')}.bak.jsonl"
+        )
+        shutil.copy2(manifest_path, backup_path)
+        log.warning("existing manifest backed up to %s before overwrite", backup_path.name)
     n_kept = n_junk = n_review = 0
     t0 = time.time()
 
