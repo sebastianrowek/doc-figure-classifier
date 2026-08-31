@@ -42,7 +42,7 @@ Work top to bottom, stop at the first match.
 ```
 1.  Is it a photograph (people, buildings, products)?          → photo
 2.  Is it a logo, seal, award or pictogram?                    → logo_icon
-3.  Does the image show MULTIPLE independent charts?           → Rule R1 (section 4)
+3.  Does the image show charts of MULTIPLE DIFFERENT types?    → Rule R1 (section 4)
 4.  Is a geographic map the dominant element?                  → map
 5.  Boxes/nodes connected by arrows (process/org chart)?       → flow
 6.  Are bars AND a line present as data series?                → combo_bar_line
@@ -298,10 +298,11 @@ Past a certain volume it is worth its own class (see section 5).
 
 ## 4. Special rules
 
-### R1 — Multiple charts in one image
+### R1 — Multiple charts of different types in one image
 
-An extracted crop contains several independent charts side by side (common in
-key-figure chapters).
+An extracted crop contains several charts of **different types** side by side
+(common in key-figure chapters) — e.g. a donut next to a bar chart. No single
+label is correct, and the charts route to different downstream parsers.
 
 **Rule:** Send the image to post-processing and cut it into individual charts.
 Each crop gets its own label.
@@ -309,8 +310,20 @@ Each crop gets its own label.
 **If cutting is not possible** (charts overlap, shared legend, shared axis):
 label as `other` and note `multi` in the notes field.
 
-**Not counted as multiple charts:** one plot with several data series; a chart
-with a separate legend.
+**Not counted as multiple charts — label as the single chart class, keep the
+crop whole:**
+- Several charts of the **same type** (e.g. two donuts, three bar charts). The
+  label is unambiguous (all donuts → `pie_donut`), so keep the crop whole and
+  label it by that type. Splitting them into separate instances is the parser's
+  job, not the classifier's — and the crop reaches the classifier whole at
+  inference (no splitter runs before it), so it must be trained and validated
+  whole, or you build in a train/inference mismatch.
+- One plot with several data series.
+- A chart with a separate legend.
+
+**Principle:** Split by routing target, not by chart instance. All charts route
+to the same class → one label, keep the crop whole. They route to different
+classes → split (or `other` + `multi` if not cleanly cuttable).
 
 ### R2 — Infographic frames
 
@@ -442,3 +455,4 @@ somewhere — sharpen it, do not admonish the labelers.
 | 1.0 | — | First edition: 12 tier-1 classes, rules R1–R6 |
 | 1.1 | 2026-08-23 | `combo_bar_line` sharpened: the test is whether the line varies across categories, not whether it has a legend entry. Resolves a contradiction with the target-line rule. |
 | 1.2 | 2026-08-26 | Merged `bar_vertical` + `bar_horizontal` into `bar` (parsed identically downstream). Split grouped bars into their own class `bar_grouped`, and kept `bar_stacked` separate — both harder to parse. New classes `scatter` (to separate it from `line`) and `flow` (process/workflow/org charts, future parsing target). Now 14 tier-1 classes. |
+| 1.3 | 2026-08-31 | R1 scoped to charts of **different** types. Several charts of the **same** type (e.g. two donuts) are now labeled as that single class and kept whole — the label is unambiguous and the crop reaches the classifier whole at inference; instance-splitting is the parser's job. Decision-tree step 3 reworded accordingly. |

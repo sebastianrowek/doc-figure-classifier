@@ -7,7 +7,7 @@ This is done with a 2-step pipeline:
 - Classify them with the existing model
 - Map its 26 classes to the defined classes the new classifier should use (Tier1-Labels, see `taxonomy.py`)
 2. Use an LLM-Classifier
-- To enable the training data preparation at scale, a multimodel LLM is used to provide an additional classification
+- To enable the training data preparation at scale, a multimodel LLM can used to provide an additional classification
 - In 3 different cases the LLM will we called for a classification:
   - Classes the model was not trained to recognize (e.g. Combo-Bar-Line chart)
   - Classes that are split into more fine-grained classes (bar, stacked bar, grouped bar)
@@ -15,10 +15,13 @@ This is done with a 2-step pipeline:
 
 ## Files
 
-| File | What it does |
+| File/Folder | What it does |
 |---|---|
 | `extract_and_classify.py` | Main pipeline. Detects figures in PDFs (Docling), filters junk crops, classifies each with the local `DocumentFigureClassifier-v2.5` model, and sorts them into `review/<label>/` folders. |
 | `llm_classify.py` | Second-opinion classifier that sends an image to an LLM (Gemini via OpenRouter) and returns `{label, confidence}`. Has a sync and an async function and a `LlmClassifyConfig` for model/decoding settings. |
+| `llm_judge_eval` | Submodule for calibrating the LLM-Judge for figure classification. Calibration compares the LLMs figure class predictions against a set of human labeled classifications across all Tier1-Label classes. For details, see the submodules README. |
+| `labeling_tool` | Submodule that provides a custom, LLM-built labeling tool because the predictions of the extract_and_classify pipeline need revision. For details, see the submodules README. |
+
 
 ## Setup
 

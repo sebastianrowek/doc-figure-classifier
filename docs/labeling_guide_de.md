@@ -40,7 +40,7 @@ Von oben nach unten durchgehen, beim ersten Treffer stoppen.
 ```
 1. Ist es eine Fotografie (Personen, Gebäude, Produkte)?      → photo
 2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → logo_icon
-3. Zeigt das Bild MEHRERE eigenständige Diagramme?            → Regel R1 (Abschnitt 4)
+3. Zeigt das Bild Diagramme MEHRERER VERSCHIEDENER Typen?     → Regel R1 (Abschnitt 4)
 4. Ist eine geografische Karte das dominante Element?         → map
 5. Kästen/Knoten durch Pfeile verbunden (Prozess/Organigramm)? → flow
 6. Sind Balken UND eine Linie als Datenreihen vorhanden?      → combo_bar_line
@@ -301,10 +301,12 @@ einem gewissen Volumen lohnt sich eine eigene Klasse (siehe Abschnitt 5).
 
 ## 4. Sonderregeln
 
-### R1 — Mehrfachdiagramme in einem Bild
+### R1 — Mehrere Diagramme verschiedener Typen in einem Bild
 
-Ein extrahierter Ausschnitt enthält mehrere eigenständige Diagramme
-nebeneinander (in Kennzahlenkapiteln häufig).
+Ein extrahierter Ausschnitt enthält mehrere Diagramme **verschiedener Typen**
+nebeneinander (in Kennzahlenkapiteln häufig) — z. B. ein Ringdiagramm neben
+einem Balkendiagramm. Kein einzelnes Label ist korrekt, und die Diagramme
+laufen in verschiedene nachgelagerte Parser.
 
 **Regel:** Bild in die Nachbearbeitung geben und in Einzeldiagramme
 zuschneiden. Jeder Zuschnitt bekommt sein eigenes Label.
@@ -312,8 +314,22 @@ zuschneiden. Jeder Zuschnitt bekommt sein eigenes Label.
 **Wenn ein Zuschnitt nicht möglich ist** (Diagramme überlappen, gemeinsame
 Legende, gemeinsame Achse): `other` labeln und im Notizfeld `multi` vermerken.
 
-**Nicht als Mehrfachdiagramm gilt:** ein Plot mit mehreren Datenreihen; ein
-Diagramm mit separater Legende.
+**Nicht als Mehrfachdiagramm gilt — als einzelne Diagrammklasse labeln,
+Ausschnitt ganz lassen:**
+- Mehrere Diagramme **desselben Typs** (z. B. zwei Ringe, drei
+  Balkendiagramme). Das Label ist eindeutig (alle Ringe → `pie_donut`), also
+  den Ausschnitt ganz lassen und nach diesem Typ labeln. Das Zerlegen in
+  einzelne Instanzen ist Aufgabe des Parsers, nicht des Klassifikators — und
+  der Ausschnitt erreicht den Klassifikator zur Inferenz als Ganzes (davor
+  läuft kein Splitter), er muss also als Ganzes trainiert und validiert werden,
+  sonst baut man einen Train/Inferenz-Versatz ein.
+- Ein Plot mit mehreren Datenreihen.
+- Ein Diagramm mit separater Legende.
+
+**Prinzip:** Nach Verarbeitungsziel trennen, nicht nach Diagramm-Instanz. Alle
+Diagramme laufen in dieselbe Klasse → ein Label, Ausschnitt ganz lassen. Sie
+laufen in verschiedene Klassen → zuschneiden (oder `other` + `multi`, wenn nicht
+sauber schneidbar).
 
 ### R2 — Infografik-Rahmen
 
@@ -448,3 +464,4 @@ einer Stelle unklar — nachschärfen, nicht die Labeler ermahnen.
 | 1.0 | — | Erstfassung: 12 Tier-1-Klassen, Regeln R1–R6 |
 | 1.1 | 2026-08-23 | `combo_bar_line` geschärft: Kriterium ist, ob sich die Linie über die Kategorien verändert, nicht ob sie einen Legendeneintrag hat. Behebt den Widerspruch zur Zielwertlinien-Regel. |
 | 1.2 | 2026-08-26 | `bar_vertical` + `bar_horizontal` zu `bar` zusammengelegt (nachgelagert identisch geparst). Gruppierte Balken als eigene Klasse `bar_grouped` ausgelagert, `bar_stacked` bleibt getrennt — beide schwerer zu parsen. Neue Klassen `scatter` (Abgrenzung gegen `line`) und `flow` (Prozess-/Ablauf-/Organigramme, späteres Parsing-Ziel). Jetzt 14 Tier-1-Klassen. |
+| 1.3 | 2026-08-31 | R1 auf Diagramme **verschiedener** Typen eingegrenzt. Mehrere Diagramme **desselben** Typs (z. B. zwei Ringe) werden jetzt als diese eine Klasse gelabelt und ganz gelassen — das Label ist eindeutig und der Ausschnitt erreicht den Klassifikator zur Inferenz als Ganzes; das Zerlegen in Instanzen ist Aufgabe des Parsers. Entscheidungsbaum-Schritt 3 entsprechend umformuliert. |
