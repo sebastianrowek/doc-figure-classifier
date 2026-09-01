@@ -11,7 +11,10 @@ and then hurt the model in production:
   emits these constantly; without them the model labels extraction junk as a
   confident chart.
 * infographic_frame / multi_chart -- rules R2 and R1. A chart taking less than
-  half the frame, or two charts that cannot be cut apart, are `other`.
+  half the frame, or two charts of DIFFERENT types combined, are `other`. R1 was
+  narrowed in guide v1.3: several charts of the *same* type are now labeled as
+  that single class and kept whole, so multi_chart must combine two distinct
+  types or it would ship a mislabeled sample.
 
 The chart-shaped sub-types (radar, tornado, boxplot) are real plots that are
 simply not tier-1 classes; the sankey/timeline/matrix group are diagrams;
@@ -473,7 +476,15 @@ def _place_image(fig, rect, pil_img):
 
 
 def _multi_chart(fig, ax, style, rng):
-    """Two independent real charts side by side -- R1, not cuttable apart."""
+    """
+    Two real charts of DIFFERENT types side by side -- R1, not cuttable apart.
+
+    The two types must differ: under guide v1.3 several charts of the *same*
+    type (two donuts, two bar charts) are labeled as that single class and kept
+    whole, so only a mix of types makes the composite `other`. Drawing the two
+    panels from independent picks would land on the same type ~1 in 7 times and
+    ship a mislabeled sample; ``rng.sample`` guarantees distinct types instead.
+    """
     pal = style.palette
     fig.delaxes(ax)
     fig.patch.set_facecolor(pal.background)
@@ -484,10 +495,11 @@ def _multi_chart(fig, ax, style, rng):
     band = fig.add_axes([0, 0.9, 1, 0.1]); band.axis("off")
     band.text(0.03, 0.5, rng.pick(list(_ORG_DE if style.language == "de" else _ORG_EN)),
               ha="left", va="center", color=pal.text, transform=band.transAxes, **_fk(style, 11, True))
+    kinds = rng.sample(_EMBEDDABLE, 2)  # two distinct chart types
     labels = []
-    for x0 in (0.04, 0.52):
+    for x0, kind in zip((0.04, 0.52), kinds):
         px = (int(fw * 0.44 * dpi), int(fh * 0.78 * dpi))
-        img, lb = _embed_chart(style, rng, px)
+        img, lb = _embed_chart(style, rng, px, allow=(kind,))
         _place_image(fig, [x0, 0.06, 0.44, 0.8], img)
         labels.append(lb)
     return {"sub_kind": "multi_chart", "embedded": labels}

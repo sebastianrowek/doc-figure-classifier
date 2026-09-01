@@ -156,11 +156,18 @@ def sample_style(rng: Rng, target_w: int, target_h: int) -> StyleSheet:
         sheet = replace(sheet, tick_rotation=rng.pick((30.0, 45.0, 90.0)))
     if rng.chance(0.05):
         sheet = replace(sheet, hatch=rng.pick(("//", "\\\\", "..", "xx")))
-    if rng.chance(0.12):  # serif house styles exist, in every preset
+    # Serif and slab house styles exist, in every preset. Sans stays dominant;
+    # serif is the common alternative and slab (Rockwell / Bodoni) a rarer
+    # display look. Every text-placement decision is measured against the real
+    # font (engines.mpl.text_width_pt), so switching family never breaks layout.
+    # face == "sans" keeps whatever the preset already chose -- which is a serif
+    # for mono_print, so that preset stays serif (or, rarely, slab).
+    face = rng.weighted({"sans": 0.84, "serif": 0.12, "slab": 0.04})
+    if face != "sans":
         sheet = replace(
             sheet,
-            font_family=available_fonts().pick(rng, "serif"),
-            font_kind="serif",
+            font_family=available_fonts().pick(rng, face),
+            font_kind=face,
         )
     return sheet
 

@@ -1,0 +1,34 @@
+# Per-class sample counts for the synthetic training-data generator.
+#
+#   PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.synth.cli \
+#       --counts-file configs/synth_counts.yaml --out data/synth --workers 8
+#
+# Format: a flat mapping of `class: count`. Every key must be a current tier-1
+# class (src/DocumentFigureClassifier/taxonomy.py) -- a stale or misspelt name is
+# a hard error, not a skipped class. Omit a class, or set it to 0, to skip it.
+# Counts are per class; the sub-type mix *within* a class is fixed by that
+# renderer's SUBTYPES weights, not here.
+#
+# --counts-file overrides --n and cannot be combined with --classes.
+#
+# The distribution below is the recommendation from
+# docs/feature-synthetic-data-gen.md: heavier on the structurally hard classes
+# (waterfall, combo), lighter on the low-variance ones.
+
+bar:            1500   # single-series bars, vertical or horizontal
+bar_grouped:    1200   # multi-series, harder to parse
+bar_stacked:    1500
+waterfall:      1800   # hardest class
+combo_bar_line: 1800   # second problem class
+line:           1500   # incl. area, stacked area
+pie_donut:      1200   # low shape variance
+scatter:         900   # incl. bubble + trend-line look-alike
+flow:            900    # org / process / cycle
+map:             900
+table:          1200
+logo_icon:       900
+other:          2100   # 14 sub-types
+
+# photo is collected from a real corpus via --photos-src, not rendered to a
+# target count; listing it here only toggles collection on. Uncomment to enable:
+# photo:        1500
