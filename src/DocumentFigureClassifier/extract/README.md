@@ -1,17 +1,46 @@
 # `extract` module
 
-Prepare the training data from real annual reports and corporate documents for the document figure classifier model. 
-This is done with a 2-step pipeline:
-1. Use existing model 
-- Extract and crop figures from corporate PDFs 
-- Classify them with the existing model
-- Map its 26 classes to the defined classes the new classifier should use (Tier1-Labels, see `taxonomy.py`)
-2. Use an LLM-Classifier
-- To enable the training data preparation at scale, a multimodel LLM can used to provide an additional classification
-- In 3 different cases the LLM will we called for a classification:
-  - Classes the model was not trained to recognize (e.g. Combo-Bar-Line chart)
-  - Classes that are split into more fine-grained classes (bar, stacked bar, grouped bar)
-  - When the probability for the main class is beneath a threshold (e.g. 0.7)
+Prepare the training data from real annual reports and corporate documents 
+for the document figure classifier model.
+
+This is done with a multi-step pipeline:
+1. Use doclings `DocumentConverter` class with its built-in layout detection model to 
+extract and crop figures and tables from corporate PDFs
+
+2. Classify them with doclings `DocumentFigureClassifier` model that we want to fine-tune
+- This is a baseline since the model is already capable of detecting certain figure 
+classes that we can use in the next step
+
+3. Map its 26 classes to the **new** 14 figure classes the fine-tuned classifier should
+output (Tier1-Labels, see `taxonomy.py`)
+- Part of the existing classes can be mapped 1-to-1 and may only get a rename (`pie_chart` -> `pie_donut`)
+- Some classes are consolidated because the detail is not needed (`logo`, `icon`, `stamp`, `signature` -> `logo_icon` )
+- Other classes will be expanded to XX for more detailed classification (`bar_chart` -> `bar`, `bar_stacked`, `bar_grouped`). For these classes, only the base label is provided (`bar` in the example) and further
+processing is needed to assign the fine-grained class labels
+
+4. Review assigned labels
+In any of the 3 cases above, the assigned class needs to be checked by a human to make 
+sure the training data is valid. 
+- This can be done with the labeling tool in the `labeling_tool` submodule. See the README 
+of the submodule for further instructions.
+- Re-labeling means moving images between folders that represent the classes, so manual 
+re-labeling is in principle also possible
+
+5. OPTIONAL: LLM classification
+To enable the training data preparation at scale, a multimodel LLM can be used in an 
+additional classification step to provide a further label.
+
+If enabled in the extraction pipeline, the LLM will we called for a classification in 
+3 cases:
+- For classes the docling model was not trained to recognize (e.g. Combo-Bar-Line chart)
+- For classes that are split into more fine-grained classes (like bar charts)
+- When the probability of the docling model for the main class is beneath 
+a threshold (e.g. 0.75)
+
+In any case, before using the LLM-as-a-judge, the calibration needs to be run with the
+`llm_judge_eval` submodule. See its README for more details.
+
+
 
 ## Files
 
@@ -20,7 +49,7 @@ This is done with a 2-step pipeline:
 | `extract_and_classify.py` | Main pipeline. Detects figures in PDFs (Docling), filters junk crops, classifies each with the local `DocumentFigureClassifier-v2.5` model, and sorts them into `review/<label>/` folders. |
 | `llm_classify.py` | Second-opinion classifier that sends an image to an LLM (Gemini via OpenRouter) and returns `{label, confidence}`. Has a sync and an async function and a `LlmClassifyConfig` for model/decoding settings. |
 | `llm_judge_eval` | Submodule for calibrating the LLM-Judge for figure classification. Calibration compares the LLMs figure class predictions against a set of human labeled classifications across all Tier1-Label classes. For details, see the submodules README. |
-| `labeling_tool` | Submodule that provides a custom, LLM-built labeling tool because the predictions of the extract_and_classify pipeline need revision. For details, see the submodules README. |
+| `labeling_tool` | Submodule that provides a custom, LLM-built labeling tool because to review the predictions of the extract_and_classify pipeline. For details, see the submodules README. |
 
 
 ## Report sources
