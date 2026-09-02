@@ -19,6 +19,16 @@ Pipeline
 
 Correcting a label = moving the file to the right folder.
 
+Language flag
+-------------
+Report filenames carry a trailing ISO 639-1 flag after the year, e.g.
+``bp_ann_rep_2024_en.pdf`` or ``allianz_ann_rep_2017_de.pdf``. detect_language()
+reads it straight off the name and every manifest record gets a ``language``
+field. The figure classifier trains on the mixed-language set, but the flag lets
+evaluation be sliced by language (the downstream chart parser is German-only, so
+German-only metrics are the ones that track deployment). Un-flagged legacy names
+fall back to German with a warning.
+
 Install (CPU-only machine with internet)
 ----------------------------------------
     python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
@@ -208,6 +218,7 @@ class Crop:
 
     crop_id: str
     source_pdf: str
+    language: str  # ISO 639-1 code read off the source filename's _<lang> flag
     page: int
     kind: str  # "picture" | "table"
     width: int
@@ -222,6 +233,37 @@ class Crop:
     routed_to: str | None = None
     decision_layer: str | None = None
     filename: str | None = None
+
+
+# --------------------------------------------------------------------------
+# Language
+# --------------------------------------------------------------------------
+
+# Report PDFs are named <company>_ann_rep_<year>_<lang>.pdf, where <lang> is an
+# ISO 639-1 code stamped on by the rename step (e.g. bp_ann_rep_2024_en.pdf).
+# The pipeline reads that flag straight off the filename so every crop carries
+# its source language into the manifest -- the figure classifier trains on the
+# mixed set, but the language field lets evaluation be sliced (e.g. German-only,
+# to match the German-only downstream parser).
+KNOWN_LANGUAGES = frozenset({"de", "en"})
+DEFAULT_LANGUAGE = "de"
+
+
+def detect_language(pdf_name: str) -> str:
+    """Infer report language from the trailing _<lang> flag in the filename.
+
+    Falls back to DEFAULT_LANGUAGE (with a warning) for any legacy name that
+    predates the flag -- the original corpus is German.
+    """
+    tail = Path(pdf_name).stem.rsplit("_", 1)[-1].lower()
+    if tail in KNOWN_LANGUAGES:
+        return tail
+    log.warning(
+        "%s has no recognized _<lang> flag; defaulting language to %r",
+        pdf_name,
+        DEFAULT_LANGUAGE,
+    )
+    return DEFAULT_LANGUAGE
 
 
 # --------------------------------------------------------------------------
@@ -324,6 +366,7 @@ def extract_crops(
     doc = result.document
     out: list[tuple[Crop, Image.Image]] = []
     counter = 0
+    language = detect_language(pdf_path.name)  # one warning per file, not per crop
     pdf_doc: pymupdf.Document | None = None  # opened lazily, only if tables are found
 
     try:
@@ -363,6 +406,7 @@ def extract_crops(
             crop = Crop(
                 crop_id=f"{pdf_path.stem}__p{page or 0:03d}__{counter:03d}",
                 source_pdf=pdf_path.name,
+                language=language,
                 page=page or 0,
                 kind=kind,
                 width=img.width,
