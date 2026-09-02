@@ -430,13 +430,24 @@ def _pct_formatter(spec: FigureSpec, style: StyleSheet, semi: bool, lay: _PieLay
 
 
 def _draw_outside_labels(ax, wedges, spec, style, lay, with_pct: bool) -> None:
-    """Category names on the outside of the circle, positioned per wedge angle."""
+    """
+    Category names on the outside of the circle, each joined to its wedge by a
+    short leader line -- the callout look real pie charts use. The label sits
+    exactly where it did before, so the leader is added without enlarging the
+    reserved margin or risking a caption running off the frame.
+    """
     pal = style.palette
     values = spec.series[0]
     for w, name, v in zip(wedges, spec.categories, values):
         angle = math.radians((w.theta1 + w.theta2) / 2.0)
+        ca, sa = math.cos(angle), math.sin(angle)
         r = 1.08 + (0.06 if lay.donut_width else 0.0)
-        xx, yy = r * math.cos(angle), r * math.sin(angle)
+        xx, yy = r * ca, r * sa
+        # leader from the wedge rim (radius 1.0) out to just short of the text
+        ax.plot(
+            [ca, (r - 0.03) * ca], [sa, (r - 0.03) * sa],
+            color=pal.muted, linewidth=0.7, zorder=1,
+        )
         text = name
         if with_pct:
             text = f"{name}  {content.format_number(v, spec.decimals, style.number_locale)} %"

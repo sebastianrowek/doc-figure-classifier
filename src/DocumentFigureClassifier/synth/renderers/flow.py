@@ -16,7 +16,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon
+from matplotlib.patches import Circle, FancyArrowPatch, FancyBboxPatch, Polygon, Rectangle
 
 from ..engines import mpl
 from ..palettes import lighten, mix, ramp, readable_on
@@ -25,9 +25,12 @@ from ..style import StyleSheet
 from .base import FigureSpec, RenderResult, Structure
 
 SUBTYPES = {
-    "org_chart": 0.45,       # hierarchy: a root box over child boxes
-    "process_flow": 0.40,    # chevrons left to right
-    "process_cycle": 0.15,   # circular arrangement with arrows
+    "org_chart": 0.28,       # hierarchy: a root box over child boxes
+    "process_flow": 0.24,    # chevrons left to right
+    "process_cycle": 0.10,   # circular arrangement with arrows
+    "value_chain": 0.16,     # a segmented right-pointing arrow (Porter style)
+    "swimlane": 0.12,        # boxes hopping between labelled horizontal lanes
+    "funnel": 0.10,          # stacked, narrowing stages
 }
 
 # Short department labels for org-chart boxes -- the boxes are narrow, so longer
@@ -42,6 +45,14 @@ _STEPS_DE = ("Analyse", "Konzept", "Planung", "Aufbau", "Betrieb", "Start",
              "Ziel", "Test", "Ausbau", "Review")
 _STEPS_EN = ("Analyze", "Concept", "Design", "Build", "Operate", "Start",
              "Goal", "Test", "Scale", "Review")
+
+# Value-chain activities (Porter): primary stages, left to right.
+_VALUE_DE = ("Beschaffung", "Produktion", "Logistik", "Marketing", "Vertrieb", "Service")
+_VALUE_EN = ("Inbound", "Operations", "Outbound", "Marketing", "Sales", "Service")
+
+# Funnel stages, widest first.
+_FUNNEL_DE = ("Besucher", "Leads", "Angebote", "Abschlüsse", "Kunden")
+_FUNNEL_EN = ("Visitors", "Leads", "Offers", "Deals", "Customers")
 
 
 def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
@@ -149,6 +160,87 @@ def _process(fig, ax, style, rng, cycle: bool) -> tuple[int, int]:
     return steps, steps - 1  # chevrons chain one into the next
 
 
+def _value_chain(fig, ax, style, rng) -> tuple[int, int]:
+    """A segmented right-pointing arrow -- the Porter value-chain look."""
+    pal = style.palette
+    _canvas(fig, ax, pal)
+    labels = rng.sample(list(_VALUE_DE if style.language == "de" else _VALUE_EN), rng.randint(4, 6))
+    n = len(labels)
+    cols = ramp(pal, n)
+    y, h = 40, 22
+    x0, x1, tip = 5, 95, 8.0
+    seg_w = (x1 - tip - x0) / n
+    for i, lb in enumerate(labels):
+        xa = x0 + i * seg_w
+        xb = xa + seg_w
+        if i < n - 1:
+            pts = [(xa, y), (xb, y), (xb, y + h), (xa, y + h)]
+        else:  # last segment carries the arrow tip
+            pts = [(xa, y), (xb, y), (x1, y + h / 2), (xb, y + h), (xa, y + h)]
+        ax.add_patch(Polygon(pts, facecolor=cols[i], edgecolor=pal.background, linewidth=1.2))
+        ax.text((xa + xb) / 2, y + h / 2, lb, ha="center", va="center",
+                color=readable_on(cols[i]), **_fk(style, min(8.0, seg_w * 0.44), True))
+    heading = "Wertschöpfungskette" if style.language == "de" else "Value chain"
+    ax.text(50, 74, heading, ha="center", va="center", color=pal.text, **_fk(style, 11, True))
+    return n, n - 1
+
+
+def _swimlane(fig, ax, style, rng) -> tuple[int, int]:
+    """Boxes stepping between labelled horizontal lanes, joined by arrows."""
+    pal = style.palette
+    _canvas(fig, ax, pal)
+    lanes = rng.sample(list(_DEPT_DE if style.language == "de" else _DEPT_EN), rng.randint(2, 3))
+    nl = len(lanes)
+    top, bot = 88, 12
+    lh = (top - bot) / nl
+    tab = mix(pal.color(0), pal.background, 0.30 if not pal.dark else 0.0)
+    for r, lane in enumerate(lanes):
+        ly = bot + (nl - 1 - r) * lh  # first lane on top
+        band = mix(pal.color(0), pal.background, 0.10 if r % 2 == 0 else 0.03)
+        ax.add_patch(Rectangle((14, ly), 82, lh, facecolor=band, edgecolor=pal.background, linewidth=1.0))
+        ax.add_patch(Rectangle((4, ly), 10, lh, facecolor=tab, edgecolor="none"))
+        ax.text(9, ly + lh / 2, lane, ha="center", va="center", rotation=90,
+                color=readable_on(tab), **_fk(style, 6.5, True))
+    steps = rng.sample(list(_STEPS_DE if style.language == "de" else _STEPS_EN), rng.randint(3, 5))
+    ns = len(steps)
+    bw, bh = 15, min(lh * 0.5, 10)
+    xs = np.linspace(20, 90 - bw, ns)
+    lane_of = [rng.randint(0, nl - 1) for _ in range(ns)]
+    centers = []
+    for step, li, x in zip(steps, lane_of, xs):
+        cy = bot + (nl - 1 - li) * lh + lh / 2
+        fc = mix(pal.color(0), pal.background, 0.25 if not pal.dark else 0.0)
+        _box(ax, x, cy - bh / 2, bw, bh, fc, pal.color(0), style, step, readable_on(fc), 6.5)
+        centers.append((x, x + bw, cy))  # (left, right, cy)
+    for i in range(ns - 1):
+        ax.add_patch(FancyArrowPatch(
+            (centers[i][1], centers[i][2]), (centers[i + 1][0], centers[i + 1][2]),
+            arrowstyle="-|>", mutation_scale=8, color=pal.muted, linewidth=1.1))
+    return ns, ns - 1
+
+
+def _funnel(fig, ax, style, rng) -> tuple[int, int]:
+    """Stacked, narrowing stages -- a conversion / sales funnel."""
+    pal = style.palette
+    _canvas(fig, ax, pal)
+    labels = rng.sample(list(_FUNNEL_DE if style.language == "de" else _FUNNEL_EN), rng.randint(3, 5))
+    n = len(labels)
+    cols = ramp(pal, n)
+    top, bot = 86, 14
+    sh = (top - bot) / n
+    wmax, wmin, cx = 76, 24, 50
+    for i, lb in enumerate(labels):
+        yt = top - i * sh
+        yb = yt - sh * 0.84
+        wt = wmax - (wmax - wmin) * i / n
+        wb = wmax - (wmax - wmin) * (i + 1) / n
+        pts = [(cx - wt / 2, yt), (cx + wt / 2, yt), (cx + wb / 2, yb), (cx - wb / 2, yb)]
+        ax.add_patch(Polygon(pts, facecolor=cols[i], edgecolor=pal.background, linewidth=1.4))
+        ax.text(cx, (yt + yb) / 2, lb, ha="center", va="center",
+                color=readable_on(cols[i]), **_fk(style, 8.0, True))
+    return n, n - 1
+
+
 def render(spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float) -> RenderResult:
     pal = style.palette
     fig, ax = mpl.new_figure(style, oversample)
@@ -156,6 +248,12 @@ def render(spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float) -> 
 
     if st == "org_chart":
         nodes, edges = _org_chart(fig, ax, style, rng)
+    elif st == "value_chain":
+        nodes, edges = _value_chain(fig, ax, style, rng)
+    elif st == "swimlane":
+        nodes, edges = _swimlane(fig, ax, style, rng)
+    elif st == "funnel":
+        nodes, edges = _funnel(fig, ax, style, rng)
     else:
         nodes, edges = _process(fig, ax, style, rng, cycle=(st == "process_cycle"))
 

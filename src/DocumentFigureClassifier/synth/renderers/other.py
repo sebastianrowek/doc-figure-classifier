@@ -54,12 +54,11 @@ SUBTYPES = {
     "tornado": 0.06,
     "boxplot": 0.06,
     "decorative": 0.07,
-    "blank_artifact": 0.11,
+    "blank_artifact": 0.15,
     "multi_chart": 0.04,
     "infographic_frame": 0.04,
-    # Named hard variants from the guide / design doc §5.
+    # Named hard variant from the guide / design doc §5.
     "table_with_bars": 0.06,
-    "donut_progress": 0.04,
 }
 
 
@@ -534,28 +533,6 @@ def _table_with_bars(fig, ax, style, rng):
     return {"sub_kind": "table_with_bars"}
 
 
-def _donut_progress(fig, ax, style, rng):
-    """
-    A ring as a *progress* indicator, not a part-to-whole breakdown -- `other`,
-    and the deliberate borderline case against pie_donut (design doc §5). Two
-    segments (done / remaining), a big percentage in the hole, a goal label.
-    """
-    pal = style.palette
-    _canvas(fig, ax, pal, rng)
-    val = rng.uniform(0.35, 0.92)
-    done = pal.color(0) if abs(_lum(pal.color(0)) - _lum(pal.background)) > 0.2 else pal.accent
-    rest = mix(pal.muted, pal.background, 0.6)
-    cx, cy, R = 50, 52, 30
-    width = R * rng.uniform(0.22, 0.4)  # thin ring -> reads as a donut
-    ax.add_patch(Wedge((cx, cy), R, 90 - val * 360, 90, facecolor=done, edgecolor="none", width=width))
-    ax.add_patch(Wedge((cx, cy), R, 90, 90 - val * 360, facecolor=rest, edgecolor="none", width=width))
-    ax.text(cx, cy, f"{round(val * 100)} %", ha="center", va="center", color=pal.text, **_fk(style, 18, True))
-    goal = (rng.pick(("Zielerreichung", "Fortschritt", "Umsetzungsgrad", "Auslastung"))
-            if style.language == "de" else rng.pick(("Progress", "Completion", "Utilisation")))
-    ax.text(cx, cy - R - 8, goal, ha="center", va="center", color=pal.muted, **_fk(style, style.tick_pt))
-    return {"sub_kind": "donut_progress"}
-
-
 def _mini(a, kind, style, rng, pal):
     n = rng.randint(3, 5)
     if kind == "bars":
@@ -622,5 +599,4 @@ _DISPATCH = {
     "boxplot": _boxplot, "decorative": _decorative,
     "blank_artifact": _blank_artifact, "multi_chart": _multi_chart,
     "infographic_frame": _infographic_frame, "table_with_bars": _table_with_bars,
-    "donut_progress": _donut_progress,
 }

@@ -113,7 +113,7 @@ src/DocumentFigureClassifier/
     │   ├── maps.py          # procedural choropleth / pins / bubble / outline / callout
     │   ├── tables.py
     │   ├── logos.py
-    │   └── other.py         # 14 sub-generators incl. R1/R2 compose and the junk classes
+    │   └── other.py         # 13 sub-generators incl. R1/R2 compose and the junk classes
     └── qa/
         ├── contact_sheet.py # montage grids per class, first 64 by sub-type
         └── stats.py         # balance, size distribution vs. real crops, style coverage
@@ -274,7 +274,7 @@ two noted.
 | `waterfall/no_connectors` | `waterfall` | guide requires only 2 of 5 features |
 | `waterfall/categorical_colors` | `waterfall` | colour by category, not direction |
 | `waterfall/stacked_lookalike` | `waterfall` | intermediates packed tight, reads as a stack |
-| `waterfall/subtotals` | `waterfall` | subtotals sitting back on the baseline |
+| `waterfall/subtotals` | `waterfall` | 1–3 subtotals dropping back to the baseline — multiple "ground" bars |
 | `bar_stacked/red_green_signed` | `bar_stacked` | green/red + signed labels, looks like a bridge |
 | `bar_stacked/single_dominant` | `bar_stacked` | one sliver segment → reads as a plain bar |
 | `bar/target_line` | `bar` | a target line is **not** a data series |
@@ -283,7 +283,6 @@ two noted.
 | `combo_bar_line/stacked_bars` | `combo_bar_line` | stack + line → decision-tree step 6 precedes step 9 |
 | `scatter/trend_line` | `scatter` | a cloud plus a dashed regression line → the case that most looks like `line` |
 | `pie_donut/semicircle` | `pie_donut` | half-circle / gauge as a part-to-whole display |
-| `other/donut_progress` | `other` | a ring as a *progress* indicator, not part-to-whole |
 | `other/table_with_bars` | `other` | a table whose value column is a bar (guide is explicit) |
 | `line/area_stacked` | `line` | stacked area stays `line` |
 | `other/multi_chart` | `other` | R1: two real charts of **different** types composed, not separable |
@@ -412,7 +411,7 @@ an external corpus (COCO/Open Images subset, run through the same pipeline) is a
 supplement. The class stays empty until real crops are supplied; nothing fakes a
 photograph.
 
-### 6.6 `other` — 14 sub-generators
+### 6.6 `other` — 13 sub-generators
 
 The most heterogeneous class, so the most sub-generators, dispatched from a table
 in `other.py`. Its invariant is open by design — anything lands here — so what
@@ -442,8 +441,10 @@ The ones that are easy to forget and expensive to omit:
   is precisely what teaches the "< 50 % → other" boundary. `multi_chart` draws
   its two types with `rng.sample(_EMBEDDABLE, 2)` so they are never the same type
   (a same-type pair would be that single class under v1.3, not `other`).
-- `table_with_bars`, `donut_progress` — the two §5 hard variants that must be
-  `other` rather than `table` / `pie_donut`.
+- `table_with_bars` — the §5 hard variant that must be `other` rather than
+  `table` (a table whose value column is a bar). (`donut_progress` was removed:
+  a progress ring is visually too close to a real donut for the `other` label to
+  teach more than it confuses.)
 
 ### 6.7 `scatter` and `flow` — promoted from `other` (v1.2)
 
@@ -451,18 +452,25 @@ Both were `other` sub-generators until taxonomy v1.2 gave them their own tier-1
 label. The drawing code moved to `renderers/scatter.py` and `renderers/flow.py`
 and was deleted from `other.py`, so no visual ships under two labels.
 
-`scatter` — points in an x/y system with no connecting line. Sub-types `single`,
-`multi` (colour-coded series), `bubble` (a size encoding) and the hard
-`trend_line` (a cloud carrying a dashed regression line — the case that most
-looks like `line`, and the reason the class exists: guide decision-tree puts
-`scatter` before `line`). The regression line is drawn but *not* reported as a
-line series, so the scatter invariant holds.
+`scatter` — points in an x/y system with no connecting line. Corporate scatters
+are sparse and heavy, so points are few and thick, markers vary, and the frame
+is drawn firm. Sub-types `single`, `multi` (colour-coded series), `bubble` (a
+size encoding), `labeled` (5–10 points, each captioned with a category word —
+the positioning / materiality look; capped low because the captions are placed
+without a measured collision pass) and the hard `trend_line` (a cloud carrying a
+dashed regression line — the case that most looks like `line`, and the reason
+the class exists: guide decision-tree puts `scatter` before `line`). The
+regression line is drawn but *not* reported as a line series, so the scatter
+invariant holds.
 
 `flow` — boxes / nodes joined by arrows. Sub-types `org_chart` (a hierarchy),
-`process_flow` (chevrons left to right) and `process_cycle` (a ring of arrows).
-The base DocumentFigureClassifier model already recognises flow charts, so this
-is a future parsing target (guide). Each renderer reports node/edge counts, and
-`base._check_flow` asserts the image is a connected diagram (≥2 nodes).
+`process_flow` (chevrons left to right), `process_cycle` (a ring of arrows),
+`value_chain` (a segmented right-pointing arrow, Porter style), `swimlane`
+(boxes stepping between labelled horizontal lanes) and `funnel` (stacked,
+narrowing stages). The base DocumentFigureClassifier model already recognises
+flow charts, so this is a future parsing target (guide). Each renderer reports
+node/edge counts, and `base._check_flow` asserts the image is a connected
+diagram (≥2 nodes).
 
 ---
 
@@ -632,9 +640,10 @@ class), which is the outstanding dependency, not generator code.
 | 2 | `waterfall`, `combo_bar_line` + hard-variant pool | ✅ |
 | 3 | `table`, `logo_icon`, `other` | ✅ |
 | 4 | `map` (procedural), `photo` (ingestion pipeline) | ✅ (photo needs a corpus) |
-| 5 | R1/R2 compose with real charts, `table_with_bars` + `donut_progress` | ✅ (Plotly deferred) |
+| 5 | R1/R2 compose with real charts, `table_with_bars` | ✅ (Plotly deferred) |
 | v1.2 | taxonomy migration: `bar_vertical`+`bar_horizontal` → `bar`; new classes `bar_grouped`, `scatter`, `flow` | ✅ |
 | v1.3 | R1 narrowed to different-type composites; `other/multi_chart` combines two distinct types | ✅ |
+| div | renderer-diversity pass: waterfall subtotals + up to 10 bars, scatter `labeled`/thicker/varied markers, pie leader lines, flow `value_chain`/`swimlane`/`funnel`, dropped `other/donut_progress` | ✅ |
 | 6 | domain-gap measurement against a real validation set | ⭕ needs the val set |
 
 ---
