@@ -40,6 +40,10 @@ SUBTYPES = {
     "semicircle": 0.12,
 }
 
+# The title routes the category kind (see build_spec): "aktionär"/"shareholder"/
+# "float" -> shareholder names, "region" -> regions, otherwise segments. Kept
+# wide so no single caption word marks a crop as a pie -- the circular shape has
+# to do that. Several share phrasing with the bar/line topics ("Umsatz nach ...").
 _TOPICS_DE = (
     ("Aktionärsstruktur", "Anteile am Grundkapital"),
     ("Umsatz nach Regionen", "Anteile in Prozent"),
@@ -49,6 +53,18 @@ _TOPICS_DE = (
     ("Umsatz nach Kundengruppen", "Anteile in Prozent"),
     ("Energiemix", "Anteile in Prozent"),
     ("Investitionen nach Bereichen", "Geschäftsjahr 2024"),
+    ("Umsatz nach Produktgruppen", "Anteile in Prozent"),
+    ("Umsatz nach Geschäftsfeldern", "Geschäftsjahr 2024"),
+    ("Umsatz nach Branchen", "Anteile am Konzernumsatz"),
+    ("Ergebnis nach Segmenten", "Anteile in Prozent"),
+    ("Mitarbeiter nach Segmenten", "zum 31.12.2024"),
+    ("Umsatz nach Vertriebskanälen", "Anteile in Prozent"),
+    ("Auftragseingang nach Regionen", "Anteile in Prozent"),
+    ("Vermögensstruktur", "Anteile an der Bilanzsumme"),
+    ("Kapitalstruktur", "Anteile an der Bilanzsumme"),
+    ("Kostenstruktur", "Anteile in Prozent"),
+    ("Rohstoffeinsatz", "Anteile in Prozent"),
+    ("Aktionärsstruktur nach Investorentyp", "Anteile am Grundkapital"),
 )
 _TOPICS_EN = (
     ("Shareholder structure", "share of subscribed capital"),
@@ -57,6 +73,16 @@ _TOPICS_EN = (
     ("Employees by region", "as of 31 Dec 2024"),
     ("Free float", "shareholder structure"),
     ("Energy mix", "share in percent"),
+    ("Revenue by product group", "share in percent"),
+    ("Revenue by business unit", "financial year 2024"),
+    ("Revenue by industry", "share of group revenue"),
+    ("Earnings by segment", "share in percent"),
+    ("Employees by segment", "as of 31 Dec 2024"),
+    ("Order intake by region", "share in percent"),
+    ("Asset structure", "share of total assets"),
+    ("Capital structure", "share of total assets"),
+    ("Cost structure", "share in percent"),
+    ("Revenue by sales channel", "share in percent"),
 )
 _HOLDERS_DE = ("Streubesitz", "Familienbesitz", "Institutionelle Investoren",
                "Eigene Aktien", "Gründerfamilie", "Ankeraktionär")

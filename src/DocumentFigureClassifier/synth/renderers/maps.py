@@ -53,12 +53,26 @@ SUBTYPES = {
     "kpi_callout": 0.12,
 }
 
+# A wide pool on purpose. A classifier keys on the map imagery, but heading text
+# recurs as a *visual* pattern, so a handful of titles all sharing "Region" /
+# "Land" would hand the model a shortcut that then fails on real maps without
+# those words. Roughly half of these carry no geographic word at all, and the
+# plain KPI framings ("Umsatz", "Mitarbeiter") deliberately overlap with the
+# bar/line/pie topic pool so no single heading word can mark a crop as a map.
 _MAP_TITLES_DE = ("Standorte weltweit", "Umsatz nach Ländern", "Vertriebsregionen",
                   "Produktionsnetzwerk", "Marktpräsenz", "Umsatz nach Region",
-                  "Mitarbeiter nach Ländern", "Globale Präsenz")
+                  "Mitarbeiter nach Ländern", "Globale Präsenz", "Internationale Präsenz",
+                  "Konzernstandorte", "Absatz nach Kontinenten", "Wachstumsmärkte",
+                  "Unsere Werke", "Produktionsstandorte", "Forschungsstandorte",
+                  "Vertriebsnetz", "Umsatz nach Absatzmärkten", "Kernmärkte",
+                  "Weltweite Präsenz", "Absatzmärkte", "Umsatz", "Mitarbeiter")
 _MAP_TITLES_EN = ("Locations worldwide", "Revenue by country", "Sales regions",
                   "Production network", "Market presence", "Revenue by region",
-                  "Employees by country", "Global footprint")
+                  "Employees by country", "Global footprint", "International presence",
+                  "Group locations", "Sales by continent", "Growth markets",
+                  "Our sites", "Production sites", "R&D sites",
+                  "Distribution network", "Revenue by market", "Core markets",
+                  "Worldwide presence", "Key markets", "Revenue", "Employees")
 
 
 @dataclass

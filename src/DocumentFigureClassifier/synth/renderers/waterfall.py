@@ -49,6 +49,11 @@ SUBTYPES = {
 }
 
 # (title, unit, magnitude, decimals, start label prefix)
+# "Brücke" / "Überleitung" ("bridge" / "reconciliation") is a near-perfect
+# waterfall tell -- if every title carried it, the model could shortcut on the
+# word's glyph shape. Roughly half of these use other phrasing ("Von X zu Y",
+# "Entwicklung ...", "Wertbeitrag"), and "Umsatzentwicklung" overlaps the line/
+# bar topic pool, so the bridge shape has to carry the class, not the caption.
 _BRIDGES_DE = (
     ("EBIT-Brücke", "Mio. €", 320, 0, "EBIT"),
     ("Umsatzbrücke", "Mio. €", 1800, 0, "Umsatz"),
@@ -58,6 +63,14 @@ _BRIDGES_DE = (
     ("Entwicklung Eigenkapital", "Mio. €", 2400, 0, "Eigenkapital"),
     ("Überleitung EBITDA", "Mio. €", 540, 0, "EBITDA"),
     ("Entwicklung Mitarbeiterzahl", "Mitarbeiter", 8600, 0, "Belegschaft"),
+    ("Von Umsatz zu EBIT", "Mio. €", 1800, 0, "Umsatz"),
+    ("Entwicklung des Konzernergebnisses", "Mio. €", 210, 0, "Ergebnis"),
+    ("Ergebnisbrücke", "Mio. €", 320, 0, "EBIT"),
+    ("Veränderung Free Cashflow", "Mio. €", 260, 0, "FCF"),
+    ("Überleitung operatives Ergebnis", "Mio. €", 480, 0, "Op. Ergebnis"),
+    ("Wertbeitrag", "Mio. €", 260, 0, "Wert"),
+    ("Umsatzentwicklung", "Mio. €", 1800, 0, "Umsatz"),
+    ("Bruttoergebnisbrücke", "Mio. €", 720, 0, "Bruttoergebnis"),
 )
 _BRIDGES_EN = (
     ("EBIT bridge", "€ m", 320, 0, "EBIT"),
@@ -66,6 +79,14 @@ _BRIDGES_EN = (
     ("Cash flow reconciliation", "€ m", 430, 0, "Cash flow"),
     ("Change in net income", "€ m", 210, 0, "Net income"),
     ("Headcount development", "employees", 8600, 0, "Headcount"),
+    ("From revenue to EBIT", "€ m", 1800, 0, "Revenue"),
+    ("Group earnings development", "€ m", 210, 0, "Earnings"),
+    ("Earnings bridge", "€ m", 320, 0, "EBIT"),
+    ("Change in free cash flow", "€ m", 260, 0, "FCF"),
+    ("Operating result reconciliation", "€ m", 480, 0, "Op. result"),
+    ("Value contribution", "€ m", 260, 0, "Value"),
+    ("Revenue development", "€ m", 1800, 0, "Revenue"),
+    ("Gross profit bridge", "€ m", 720, 0, "Gross profit"),
 )
 
 # Reasons for change -- feature 5. Never years, never categories.
