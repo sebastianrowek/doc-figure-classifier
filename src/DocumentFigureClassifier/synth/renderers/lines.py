@@ -42,6 +42,16 @@ SUBTYPES = {
 _BENCHMARKS = ("DAX", "MDAX", "SDAX", "STOXX Europe 600", "TecDAX")
 _MARKERS = ("o", "s", "D", "^", "v")
 
+# index_benchmark used to carry one fixed title per language, which is exactly the
+# kind of always-present caption a classifier can shortcut on. A small pool breaks
+# that up; the dense two-line share/index shape is the real signature anyway.
+_BENCH_TITLES_DE = ("Aktienkursentwicklung", "Kursentwicklung der Aktie",
+                    "Entwicklung des Aktienkurses", "Aktie im Vergleich",
+                    "Wertentwicklung der Aktie", "Aktienperformance")
+_BENCH_TITLES_EN = ("Share price development", "Share price performance",
+                    "Share price vs. benchmark", "Total shareholder return",
+                    "Share performance", "Stock price development")
+
 
 def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
     topic = content.pick_topic(rng, style.language)
@@ -126,7 +136,7 @@ def _benchmark_spec(style: StyleSheet, rng: Rng) -> FigureSpec:
     return FigureSpec(
         label="line",
         sub_type="index_benchmark",
-        title=("Aktienkursentwicklung" if style.language == "de" else "Share price development")
+        title=(rng.pick(_BENCH_TITLES_DE if style.language == "de" else _BENCH_TITLES_EN))
         if style.title_mode != "none"
         else None,
         subtitle=("indexiert, 01.01. = 100" if style.language == "de" else "indexed, 1 Jan = 100")

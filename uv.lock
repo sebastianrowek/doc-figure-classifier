@@ -567,6 +567,7 @@ eval = [
 synth = [
     { name = "matplotlib" },
     { name = "numpy" },
+    { name = "pyyaml" },
 ]
 
 [package.metadata]
@@ -597,6 +598,7 @@ eval = [
 synth = [
     { name = "matplotlib", specifier = ">=3.9" },
     { name = "numpy", specifier = ">=2.0" },
+    { name = "pyyaml", specifier = ">=6" },
 ]
 
 [[package]]

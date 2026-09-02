@@ -1,8 +1,15 @@
-# Synthetic Training Set (12 Tier-1 Classes)
+# Synthetic Training Set (14 Tier-1 Classes)
 
-Status: implemented. 11 of the 12 classes render procedurally; `photo` is an
+Status: implemented. 13 of the 14 classes render procedurally; `photo` is an
 ingestion pipeline that needs a real photo corpus. A full run produces the whole
 labelled set in a few minutes.
+
+Tracks labeling-guide **taxonomy v1.3**. `taxonomy.py` is the single source of
+truth for the class list; this document reflects the v1.2 changes (the former
+`bar_vertical`/`bar_horizontal` merged into `bar`; grouped bars split into
+`bar_grouped`; `scatter` and `flow` promoted to their own classes) and the v1.3
+R1 narrowing. Where a name here differs from an older note, the name here is the
+current one.
 
 Goal: reproducible generation of labelled images that look like Docling crops
 from annual-report PDFs, for training a lightweight figure classifier.
@@ -24,7 +31,7 @@ is legwork.
 **(1) The label comes from the generator, not from the image.**
 Every renderer knows its label up front. The risk is that aggressive
 randomization tips an image into a *different* class — a waterfall whose bars all
-happen to land on the baseline is a `bar_vertical`. Each renderer therefore
+happen to land on the baseline is a `bar`. Each renderer therefore
 reports the structural facts of what it drew, and a **label invariant** is
 checked afterwards; on violation the sample is discarded and redrawn with a
 fresh seed. These invariants are the labeling guide expressed as code — see §4.
@@ -76,7 +83,8 @@ nothing from the extraction pipeline except the shared taxonomy.
 ```
 src/DocumentFigureClassifier/
 ├── taxonomy.py              # TIER1_LABELS + folder names + junk filter, single source
-├── extract_and_classify.py  # extraction pipeline; imports taxonomy.py
+├── extract/
+│   └── extract_and_classify.py  # extraction pipeline; imports taxonomy.py
 └── synth/
     ├── cli.py               # entry point; sample loop, workers, --regenerate, photo step
     ├── config.py            # RunConfig, ClassPlan, REGISTRY, allocate()
@@ -95,15 +103,17 @@ src/DocumentFigureClassifier/
     ├── renderers/
     │   ├── base.py          # FigureSpec, Structure, RenderResult; the invariant checks
     │   ├── common.py        # shared layout machinery (fitting, legends, margins, headings)
-    │   ├── bars.py          # bar_vertical, bar_horizontal, bar_stacked
+    │   ├── bars.py          # bar (single series), bar_grouped, bar_stacked
     │   ├── waterfall.py
     │   ├── lines.py         # line + area (guide: area counts as line)
     │   ├── combo.py
     │   ├── pie.py           # pie, donut, centre-figure, exploded, semicircle
+    │   ├── scatter.py       # scatter + bubble + trend-line look-alike (v1.2 class)
+    │   ├── flow.py          # org chart, process flow, cycle (v1.2 class)
     │   ├── maps.py          # procedural choropleth / pins / bubble / outline / callout
     │   ├── tables.py
     │   ├── logos.py
-    │   └── other.py         # 18 sub-generators incl. R1/R2 compose and the junk classes
+    │   └── other.py         # 13 sub-generators incl. R1/R2 compose and the junk classes
     └── qa/
         ├── contact_sheet.py # montage grids per class, first 64 by sub-type
         └── stats.py         # balance, size distribution vs. real crops, style coverage
@@ -149,7 +159,10 @@ happens if a renderer's parameters have drifted into producing off-label images.
 
 R1/R2 composition is **not** a separate post-step: the two cases are `other`
 sub-types that compose real charts internally (§6.6), so they are labelled
-`other` by construction and need no after-the-fact relabel.
+`other` by construction and need no after-the-fact relabel. Under guide v1.3 R1
+covers only charts of *different* types, so `other/multi_chart` combines two
+distinct chart types; several charts of the same type are that single class and
+are not generated here.
 
 ---
 
@@ -163,7 +176,7 @@ so post-training error analysis can ask which style axes produce mistakes.
 |---|---|
 | Palette | 24 corporate seed sets (2–6 colours), monochrome ramps, single-accent-on-grey, greyscale, dark |
 | Background | White, off-white, light grey panel, tinted, rarely dark |
-| Typeface | Sampled from installed system fonts filtered against an allowlist — 18 sans / 12 serif / 3 slab on this machine; a serif house style appears in every preset ~12 % of the time |
+| Typeface | Sampled from installed system fonts filtered against an allowlist — 18 sans / 12 serif / 3 slab on this machine; the cross-cutting draw switches a sans preset to a serif face ~12 % of the time and a slab (display) face ~4 %, so ~22 % of samples end up serif once `mono_print` is included |
 | Spines | all / left+bottom / bottom only / **none** |
 | Gridlines | none / light horizontal / dashed / full |
 | Numeric axis | present / **replaced by data labels (R4)** |
@@ -216,17 +229,25 @@ without adding its check is a hard `KeyError`, not a silent pass.
 
 | Class | Must hold | Must not hold |
 |---|---|---|
-| `bar_vertical` | ≥3 bars, all based at 0, vertical, 1 segment per bar | a non-reference line series; connector lines |
-| `bar_horizontal` | as above, horizontal | same |
-| `bar_stacked` | ≥2 segments per bar, all based at 0 | connector lines |
+| `bar` | ≥3 bars, **exactly 1** bar series, all based at 0, 1 segment per bar | ≥2 series (`bar_grouped`); segments per bar (`bar_stacked`); off-baseline bars (`waterfall`); a non-reference line (`combo_bar_line`); connectors |
+| `bar_grouped` | **≥2** bar series, 1 segment per bar, all based at 0 | segments per bar (`bar_stacked`); off-baseline bars; a non-reference line; connectors |
+| `bar_stacked` | ≥2 bars, **≥2 segments** per bar, all based at 0 | connector lines |
 | `waterfall` | ≥4 bars, ≥2 floating, ≥2 on the baseline, 1 segment per bar | every bar on the baseline |
 | `line` | ≥1 line series, **0 bar series** | bars |
 | `combo_bar_line` | ≥1 bar series **and** ≥1 non-reference line series; that line has its own axis **or** its own legend entry | the only line is a reference line (constant across categories) |
 | `pie_donut` | ≥2 segments | — |
+| `scatter` | **≥5 points**, no bars, no pie segments | a data (non-reference) line through the points — that is `line` |
+| `flow` | **≥2 nodes** | — |
 | `map` | land geometry ≥ 45 % of the frame (shoelace) | — |
 | `table` | ≥2 rows × ≥2 columns, **no embedded graphics** | bars/sparklines in cells (those are `other`) |
 | `logo_icon` | no bar/line/pie data series | a data series |
+| `photo` | — (open; the label is trusted — it is an ingested real crop) | — |
 | `other` | open by design | — |
+
+Orientation no longer separates classes (taxonomy v1.2): `bar` and `bar_stacked`
+are drawn vertical or horizontal per sample, and the check is on series/segment
+structure, not on which way the bars point. Two or more single-segment series
+side by side is `bar_grouped`.
 
 One place the code is deliberately tighter than the guide's prose. The guide's
 rule of thumb makes a chart a combo when the line has "its own axis or its own
@@ -253,24 +274,25 @@ two noted.
 | `waterfall/no_connectors` | `waterfall` | guide requires only 2 of 5 features |
 | `waterfall/categorical_colors` | `waterfall` | colour by category, not direction |
 | `waterfall/stacked_lookalike` | `waterfall` | intermediates packed tight, reads as a stack |
-| `waterfall/subtotals` | `waterfall` | subtotals sitting back on the baseline |
+| `waterfall/subtotals` | `waterfall` | 1–3 subtotals dropping back to the baseline — multiple "ground" bars |
 | `bar_stacked/red_green_signed` | `bar_stacked` | green/red + signed labels, looks like a bridge |
 | `bar_stacked/single_dominant` | `bar_stacked` | one sliver segment → reads as a plain bar |
-| `bar_vertical/target_line` | `bar_vertical` | a target line is **not** a data series |
-| `bar_vertical/average_line` | `bar_vertical` | same |
-| `bar_vertical/grouped` | `bar_vertical` | grouping is not its own type |
+| `bar/target_line` | `bar` | a target line is **not** a data series |
+| `bar/average_line` | `bar` | same |
 | `combo_bar_line/flat_line` | `combo_bar_line` | near-constant margin, but real values + own axis + legend |
-| `combo_bar_line/stacked_bars` | `combo_bar_line` | stack + line → decision-tree step 5 precedes step 8 |
+| `combo_bar_line/stacked_bars` | `combo_bar_line` | stack + line → decision-tree step 6 precedes step 9 |
+| `scatter/trend_line` | `scatter` | a cloud plus a dashed regression line → the case that most looks like `line` |
 | `pie_donut/semicircle` | `pie_donut` | half-circle / gauge as a part-to-whole display |
-| `other/donut_progress` | `other` | a ring as a *progress* indicator, not part-to-whole |
 | `other/table_with_bars` | `other` | a table whose value column is a bar (guide is explicit) |
 | `line/area_stacked` | `line` | stacked area stays `line` |
-| `other/multi_chart` | `other` | R1: two real charts composed, not separable |
+| `other/multi_chart` | `other` | R1: two real charts of **different** types composed, not separable |
 | `other/infographic_frame` | `other` | R2: a real chart under 50 % of the frame |
 
-Not implemented: `map/with_bars` (a map with overlaid bars) — a minor variant,
-left for later. The old plan's `pie_donut/gauge_halfcircle` shipped as
-`pie_donut/semicircle`.
+Grouping is now its own class (`bar_grouped`), not a `bar` sub-type, so the old
+`bar_vertical/grouped` hard variant is gone — the confusion it targeted is
+carried by the class split itself. Not implemented: `map/with_bars` (a map with
+overlaid bars) — a minor variant, left for later. The old plan's
+`pie_donut/gauge_halfcircle` shipped as `pie_donut/semicircle`.
 
 ### How the waterfall sub-types are chosen
 
@@ -283,8 +305,8 @@ bars, and would then fail on every corporate bridge that omits them. So each
 sub-type switches one feature off (§5 rows above). All stay `waterfall` by
 construction.
 
-The mirror image is in place: `bar_vertical/target_line` and `average_line` draw
-genuinely constant lines over bars and stay `bar_vertical`, while
+The mirror image is in place: `bar/target_line` and `average_line` draw
+genuinely constant lines over bars and stay `bar`, while
 `combo_bar_line/flat_line` draws a line that is visually almost flat but has real
 per-category values, its own axis and its own legend entry (with a guard that
 nudges the last point if rounding ever produced a truly constant line). Between
@@ -294,16 +316,22 @@ them the two classes cover both sides of the reference-line confusion.
 
 ## 6. Classes in detail
 
-### 6.1 The seven chart classes — matplotlib
+### 6.1 The core chart classes — matplotlib
 
-`bar_vertical`, `bar_horizontal`, `bar_stacked`, `waterfall`, `line`,
-`combo_bar_line`, `pie_donut`. All drawn straight from `Figure` +
-`FigureCanvasAgg`, no `pyplot` (its global registry leaks across a large run and
-is unsafe in workers). Matplotlib has no built-in waterfall — it is built from
+`bar`, `bar_grouped`, `bar_stacked`, `waterfall`, `line`, `combo_bar_line`,
+`pie_donut`, `scatter`. All drawn straight from `Figure` + `FigureCanvasAgg`, no
+`pyplot` (its global registry leaks across a large run and is unsafe in
+workers). Matplotlib has no built-in waterfall — it is built from
 `bar(..., bottom=cumsum)` plus optional connector segments, which gives exactly
-the control the invariant needs. `common.py` holds the layout machinery all seven
-share (title/subtitle fitting, category-tick fitting, legend sizing, margins,
-headings), extracted once the second renderer needed it.
+the control the invariant needs. `common.py` holds the layout machinery the
+axis-based classes share (title/subtitle fitting, category-tick fitting, legend
+sizing, margins, headings), extracted once the second renderer needed it.
+
+Orientation (vertical/horizontal) is a per-sample layout choice for `bar` and
+`bar_stacked`, not a class: taxonomy v1.2 merged the former `bar_vertical` and
+`bar_horizontal` into `bar` because they parse identically downstream, and split
+two-or-more series side by side into `bar_grouped`. `scatter` and `flow` (§6.7)
+were promoted out of `other` in the same revision and draw on this engine too.
 
 **Plotly is deferred, not skipped.** The plan called for a Plotly engine on ~15 %
 of chart samples for a recognizably different look and a native `go.Waterfall`.
@@ -383,19 +411,21 @@ an external corpus (COCO/Open Images subset, run through the same pipeline) is a
 supplement. The class stays empty until real crops are supplied; nothing fakes a
 photograph.
 
-### 6.6 `other` — 18 sub-generators
+### 6.6 `other` — 13 sub-generators
 
 The most heterogeneous class, so the most sub-generators, dispatched from a table
 in `other.py`. Its invariant is open by design — anything lands here — so what
 matters is coverage of the shapes the extraction pipeline actually produces.
 
-Diagrams: `org_chart`, `process_flow` (chevrons / cycles), `timeline`
-(horizontal / vertical), `matrix` (2×2 / 3×3 risk / materiality point cloud),
-`kpi_tile` (big number + label + arrow, single or a row), `gauge_progress`
-(gauge / ring / progress bars / traffic light), `sankey`.
+Diagrams: `timeline` (horizontal / vertical), `matrix` (2×2 / 3×3 risk /
+materiality point cloud), `kpi_tile` (big number + label + arrow, single or a
+row), `gauge_progress` (gauge / ring / progress bars / traffic light), `sankey`.
 
-Chart-shaped but not tier-1 classes: `radar`, `bubble`, `tornado`, `scatter`,
-`boxplot`.
+Chart-shaped but not tier-1 classes: `radar`, `tornado`, `boxplot`.
+
+Org charts, process flows, scatter and bubble plots used to live here; taxonomy
+v1.2 gave them their own classes (`flow`, `scatter`), so they were removed to
+avoid shipping the same visual under two labels — see §6.7.
 
 The ones that are easy to forget and expensive to omit:
 
@@ -406,11 +436,41 @@ The ones that are easy to forget and expensive to omit:
 - `multi_chart` (R1) and `infographic_frame` (R2) — these compose **real**
   rendered charts, not stand-ins: `other._embed_chart` calls back into the class
   `REGISTRY` to render an actual bar/line/pie/etc. chart and `imshow`s it into the
-  layout. So R1 tiles two genuine charts that cannot be cut apart, and R2 embeds a
-  genuine chart under half the frame — which is precisely what teaches the
-  "< 50 % → other" boundary.
-- `table_with_bars`, `donut_progress` — the two §5 hard variants that must be
-  `other` rather than `table` / `pie_donut`.
+  layout. So R1 tiles two genuine charts of **different** types (guide v1.3) that
+  cannot be cut apart, and R2 embeds a genuine chart under half the frame — which
+  is precisely what teaches the "< 50 % → other" boundary. `multi_chart` draws
+  its two types with `rng.sample(_EMBEDDABLE, 2)` so they are never the same type
+  (a same-type pair would be that single class under v1.3, not `other`).
+- `table_with_bars` — the §5 hard variant that must be `other` rather than
+  `table` (a table whose value column is a bar). (`donut_progress` was removed:
+  a progress ring is visually too close to a real donut for the `other` label to
+  teach more than it confuses.)
+
+### 6.7 `scatter` and `flow` — promoted from `other` (v1.2)
+
+Both were `other` sub-generators until taxonomy v1.2 gave them their own tier-1
+label. The drawing code moved to `renderers/scatter.py` and `renderers/flow.py`
+and was deleted from `other.py`, so no visual ships under two labels.
+
+`scatter` — points in an x/y system with no connecting line. Corporate scatters
+are sparse and heavy, so points are few and thick, markers vary, and the frame
+is drawn firm. Sub-types `single`, `multi` (colour-coded series), `bubble` (a
+size encoding), `labeled` (5–10 points, each captioned with a category word —
+the positioning / materiality look; capped low because the captions are placed
+without a measured collision pass) and the hard `trend_line` (a cloud carrying a
+dashed regression line — the case that most looks like `line`, and the reason
+the class exists: guide decision-tree puts `scatter` before `line`). The
+regression line is drawn but *not* reported as a line series, so the scatter
+invariant holds.
+
+`flow` — boxes / nodes joined by arrows. Sub-types `org_chart` (a hierarchy),
+`process_flow` (chevrons left to right), `process_cycle` (a ring of arrows),
+`value_chain` (a segmented right-pointing arrow, Porter style), `swimlane`
+(boxes stepping between labelled horizontal lanes) and `funnel` (stacked,
+narrowing stages). The base DocumentFigureClassifier model already recognises
+flow charts, so this is a future parsing target (guide). Each renderer reports
+node/edge counts, and `base._check_flow` asserts the image is a connected
+diagram (≥2 nodes).
 
 ---
 
@@ -444,30 +504,50 @@ exactly those. All degradation parameters are recorded in the manifest.
 
 ## 8. Volume and how to steer it
 
-There is **no per-class-count flag.** `--n N` is applied uniformly to every
-rendered class; `--classes a,b,c` restricts which classes run. For a non-uniform
-plan, run once per class (or group) into the same output with `--append` (start
-from a clean `data/synth`). Sub-type mix *within* a class is set by the
-`SUBTYPES` weight dict at the top of each renderer module; `config.allocate` turns
-those weights into exact counts by largest remainder, so rare sub-types are never
-starved by chance.
+`--n N` applies one uniform count to every rendered class; `--classes a,b,c`
+restricts which classes run. For a **non-uniform** plan, pass a YAML file of
+per-class counts with `--counts-file` (it overrides `--n` and cannot be combined
+with `--classes`):
+
+```yaml
+# configs/synth_counts.yaml
+bar: 1500
+waterfall: 1800
+other: 2100
+# ...
+```
+
+Every key must be a current tier-1 label — validated against `taxonomy.py`, so a
+stale name like `bar_vertical` is a hard error rather than a silently skipped
+class (`config.load_class_counts`). A class omitted from the file, or set to `0`,
+is not generated. A ready-to-use file with the recommended distribution below
+ships as `configs/synth_counts.yaml`. (The older approach — one `--append` run
+per class into a clean `data/synth` — still works.)
+
+Sub-type mix *within* a class is set by the `SUBTYPES` weight dict at the top of
+each renderer module; `config.allocate` turns those weights into exact counts by
+largest remainder, so rare sub-types are never starved by chance.
 
 A reasonable target distribution (heavier on the structurally hard classes,
 lighter on the easy ones):
 
 | Class | Count | Note |
 |---|---|---|
-| `bar_vertical` / `bar_horizontal` / `bar_stacked` | ~1,500 each | |
+| `bar` | ~1,500 | vertical or horizontal, single series |
+| `bar_grouped` | ~1,200 | multi-series, harder to parse |
+| `bar_stacked` | ~1,500 | |
 | `waterfall` | ~1,800 | hardest class |
 | `combo_bar_line` | ~1,800 | second problem class |
 | `line` | ~1,500 | incl. area, stacked area |
 | `pie_donut` | ~1,200 | low shape variance |
+| `scatter` | ~900 | incl. bubble + trend-line look-alike |
+| `flow` | ~900 | org / process / cycle |
 | `map` | ~900 | |
 | `table` | ~1,200 | |
-| `logo_icon` | ~1,200 | |
-| `other` | ~2,400 | 18 sub-types |
+| `logo_icon` | ~900 | |
+| `other` | ~2,100 | 14 sub-types |
 | `photo` | ~1,500 | real, once a corpus exists |
-| **Total** | **~18,000** | |
+| **Total** | **~18,900** | |
 
 This is a recommendation, not something the code enforces. Class imbalance can
 also be handled downstream via class weights or calibration against the real
@@ -480,12 +560,12 @@ validation set.
 ```
 data/synth/
 ├── train/
-│   ├── bar_vertical/ …
+│   ├── bar/ …
 │   ├── other/ …
 │   └── photo/            # populated only when --photos-src has real crops
 ├── manifest.jsonl
 └── qa/
-    ├── contact_bar_vertical.png …
+    ├── contact_bar.png …
     └── stats.md
 ```
 
@@ -522,8 +602,9 @@ after every sample; a leaked-figure memory blow-up across a large run is real.
 
 Observed throughput ≈ 6–10 images/s at 6 workers — the diagram-heavy classes
 (`map`, `other`) with many patches are several times slower than a plain bar
-chart, so the mean is well below matplotlib's ceiling. A full ~1,650-image
-smoke run finishes in a few minutes; an 18,000-image run in well under an hour.
+chart, so the mean is well below matplotlib's ceiling. A default smoke run
+(`--n 200`, ~2,600 images across the 13 rendered classes) finishes in a few
+minutes; an ~18,000-image run in well under an hour.
 
 ---
 
@@ -554,12 +635,15 @@ class), which is the outstanding dependency, not generator code.
 
 | Phase | Content | Status |
 |---|---|---|
-| 0 | scaffolding + `bar_vertical`, degradation dialled in | ✅ |
-| 1 | `bar_horizontal`, `bar_stacked`, `line`, `pie_donut` | ✅ |
+| 0 | scaffolding + the `bar` renderer, degradation dialled in | ✅ |
+| 1 | horizontal bars (now folded into `bar`), `bar_stacked`, `line`, `pie_donut` | ✅ |
 | 2 | `waterfall`, `combo_bar_line` + hard-variant pool | ✅ |
-| 3 | `table`, `logo_icon`, `other` (18 sub-generators) | ✅ |
+| 3 | `table`, `logo_icon`, `other` | ✅ |
 | 4 | `map` (procedural), `photo` (ingestion pipeline) | ✅ (photo needs a corpus) |
-| 5 | R1/R2 compose with real charts, `table_with_bars` + `donut_progress` | ✅ (Plotly deferred) |
+| 5 | R1/R2 compose with real charts, `table_with_bars` | ✅ (Plotly deferred) |
+| v1.2 | taxonomy migration: `bar_vertical`+`bar_horizontal` → `bar`; new classes `bar_grouped`, `scatter`, `flow` | ✅ |
+| v1.3 | R1 narrowed to different-type composites; `other/multi_chart` combines two distinct types | ✅ |
+| div | renderer-diversity pass: waterfall subtotals + up to 10 bars, scatter `labeled`/thicker/varied markers, pie leader lines, flow `value_chain`/`swimlane`/`funnel`, dropped `other/donut_progress` | ✅ |
 | 6 | domain-gap measurement against a real validation set | ⭕ needs the val set |
 
 ---
@@ -581,13 +665,22 @@ PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.synth.cli \
     --photos-src data/parsed/review/photo --photos-exclude <val_report_stems>
 ```
 
+Non-uniform per-class counts from a YAML plan (§8):
+
+```
+PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.synth.cli \
+    --counts-file configs/synth_counts.yaml --out data/synth --workers 8 \
+    --contact-sheet --size-manifest data/parsed/manifest.jsonl
+```
+
 Before a *complete* run: re-extract the report corpus so `data/parsed/` exists
 again — that restores real-size sampling (`--size-manifest`) and provides the
 photo crops (`--photos-src`). Two or more reports are needed for a clean photo
 train/val split.
 
-Key flags: `--n` (per class), `--classes a,b,c` (subset), `--append` (accumulate,
-for per-class counts), `--workers`, `--seed`, `--no-degrade` (debug),
+Key flags: `--n` (uniform per-class count), `--counts-file <yaml>` (per-class
+counts; overrides `--n`, excludes `--classes`), `--classes a,b,c` (subset),
+`--append` (accumulate), `--workers`, `--seed`, `--no-degrade` (debug),
 `--regenerate <crop_id> --dump-stages <dir>` (reproduce one sample with stages),
 `--photos-src / --photos-per-source / --photos-exclude`, `--contact-sheet /
 --sheet-cols`.

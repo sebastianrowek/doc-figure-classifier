@@ -23,6 +23,21 @@ This is done with a 2-step pipeline:
 | `labeling_tool` | Submodule that provides a custom, LLM-built labeling tool because the predictions of the extract_and_classify pipeline need revision. For details, see the submodules README. |
 
 
+## Report sources
+
+Input PDFs are German annual reports (`Geschäftsbericht`) from listed companies,
+named `{company}_ann_rep_{year}.pdf`. Training reports live in `data/reports/`;
+held-out **test** reports (companies not used for training) live in
+`data/reports/test/`. Download with a browser `User-Agent` on curl — several IR
+sites 403 plain requests.
+
+**Candidates for more reports** (not yet collected, publish a German
+`Geschäftsbericht`): Gerresheimer, Jungheinrich, Ströer, Fuchs SE, Fielmann,
+Freenet, K+S, HOCHTIEF, BayWa, KWS Saat, SMA Solar, PVA TePla, Talanx (full
+report is behind a gated URL — needs a real browser).
+
+Skip: Airbus, QIAGEN, Zalando — English-only, no German `Geschäftsbericht`.
+
 ## Setup
 
 Both scripts read the API key from a `.env` file in the repo root:

@@ -1,0 +1,32 @@
+# First synth generation run -- per-class counts.
+#
+# Derived from the real hand-labeled counts in data/parsed/review/ (measured
+# 2026-09-01) for a FINE-TUNE of Docling DocumentFigureClassifier v2.5, not a
+# from-scratch train. Principle: compensate the thin real classes, leave the
+# saturated ones (table, photo) to real data, lean toward the hard/confusable
+# classes. See docs/feature-synthetic-data-gen.md sect. 8.
+#
+#   PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.synth.cli \
+#       --counts-file configs/synth_counts.first_run.yaml --out data/synth \
+#       --workers 8 --size-manifest data/parsed/manifest.jsonl --contact-sheet
+#
+# Expected on this machine: ~8,900 images, ~16 min at 8 workers, ~3.8 GB.
+#
+# Columns below: synth count  # real crops available -> combined (real + synth)
+
+other:           400   # real 1273 -> 1673  covered; synth for R1/R2 + blank_artifact boundaries
+bar:             500   # real  521 -> 1021  good base; synth for axis-less/style + target_line
+pie_donut:       500   # real  435 ->  935
+line:            700   # real  203 ->  903
+logo_icon:       600   # real  174 ->  774  synth = invented marks, keep in check
+flow:            700   # real  151 ->  851
+bar_stacked:     800   # real  138 ->  938  thin + waterfall confusion
+bar_grouped:     800   # real  132 ->  932  thin + harder to parse
+map:             700   # real  106 ->  806  synth blobs are a domain-gap risk -> collect real
+combo_bar_line: 1000   # real   90 -> 1090  thin + second-hardest class
+waterfall:      1200   # real   43 -> 1243  hardest + thinnest -> synth's highest-value use
+scatter:        1000   # real   25 -> 1025  critically thin real; watch this class's real-val recall
+
+# table:  0  -- 11,040 real crops; adding synth only adds domain gap. Downsample
+#              or class-weight table on the training side instead.
+# photo:  0  -- 1,442 real crops, collected via --photos-src, never synthesized.

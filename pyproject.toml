@@ -51,4 +51,5 @@ eval = [
 synth = [
     "matplotlib>=3.9",
     "numpy>=2.0",
+    "pyyaml>=6",
 ]

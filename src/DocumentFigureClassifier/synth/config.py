@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
 
+from ..taxonomy import TIER1_LABELS
 from .renderers import bars, combo, flow, lines, logos, maps, other, pie, scatter, tables, waterfall
 
 
@@ -141,3 +143,69 @@ def allocate(subtypes: dict[str, float], n: int) -> list[str]:
     for k, c in zip(keys, counts):
         out.extend([k] * c)
     return out
+
+
+def load_class_counts(path: str | Path) -> dict[str, int]:
+    """
+    Read a YAML plan of per-class sample counts and validate it against the
+    current taxonomy.
+
+    The file is a flat mapping of tier-1 class name to a non-negative integer::
+
+        bar: 1500
+        waterfall: 1800
+        other: 2100
+
+    Every key must be a current tier-1 label (``taxonomy.TIER1_LABELS``) -- a
+    stale or misspelt name such as ``bar_vertical`` is a hard error, not a
+    silently skipped class, which is the whole point of validating here rather
+    than discovering an empty class folder after a long run. Values must be
+    non-negative integers; ``0`` means "skip this class". Classes absent from
+    the file are simply not returned; the caller decides what to do with them.
+
+    Raises ``ValueError`` on any structural or taxonomy problem and ``OSError``
+    if the file cannot be read.
+    """
+    import yaml  # deferred: only needed when --counts-file is used
+
+    text = Path(path).read_text(encoding="utf-8")
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"{path}: not valid YAML -- {exc}") from exc
+
+    if data is None:
+        raise ValueError(f"{path}: file is empty")
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"{path}: expected a mapping of 'class: count', got a {type(data).__name__}"
+        )
+
+    valid = set(TIER1_LABELS)
+    counts: dict[str, int] = {}
+    unknown: list[str] = []
+    bad_value: list[str] = []
+    for key, value in data.items():
+        name = str(key)
+        if name not in valid:
+            unknown.append(name)
+            continue
+        # bool is a subclass of int -- reject `bar: true`, which is almost
+        # certainly a mistake, rather than counting it as 1.
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            bad_value.append(f"{name}: {value!r}")
+            continue
+        counts[name] = value
+
+    if unknown:
+        raise ValueError(
+            f"{path}: not current tier-1 classes: {', '.join(sorted(unknown))}. "
+            f"Valid classes are: {', '.join(TIER1_LABELS)}"
+        )
+    if bad_value:
+        raise ValueError(
+            f"{path}: counts must be non-negative integers; got {', '.join(bad_value)}"
+        )
+    if not counts:
+        raise ValueError(f"{path}: no class counts found")
+    return counts

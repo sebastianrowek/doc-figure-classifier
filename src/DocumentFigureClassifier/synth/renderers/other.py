@@ -11,7 +11,10 @@ and then hurt the model in production:
   emits these constantly; without them the model labels extraction junk as a
   confident chart.
 * infographic_frame / multi_chart -- rules R2 and R1. A chart taking less than
-  half the frame, or two charts that cannot be cut apart, are `other`.
+  half the frame, or two charts of DIFFERENT types combined, are `other`. R1 was
+  narrowed in guide v1.3: several charts of the *same* type are now labeled as
+  that single class and kept whole, so multi_chart must combine two distinct
+  types or it would ship a mislabeled sample.
 
 The chart-shaped sub-types (radar, tornado, boxplot) are real plots that are
 simply not tier-1 classes; the sankey/timeline/matrix group are diagrams;
@@ -51,12 +54,11 @@ SUBTYPES = {
     "tornado": 0.06,
     "boxplot": 0.06,
     "decorative": 0.07,
-    "blank_artifact": 0.11,
+    "blank_artifact": 0.15,
     "multi_chart": 0.04,
     "infographic_frame": 0.04,
-    # Named hard variants from the guide / design doc §5.
+    # Named hard variant from the guide / design doc §5.
     "table_with_bars": 0.06,
-    "donut_progress": 0.04,
 }
 
 
@@ -473,7 +475,15 @@ def _place_image(fig, rect, pil_img):
 
 
 def _multi_chart(fig, ax, style, rng):
-    """Two independent real charts side by side -- R1, not cuttable apart."""
+    """
+    Two real charts of DIFFERENT types side by side -- R1, not cuttable apart.
+
+    The two types must differ: under guide v1.3 several charts of the *same*
+    type (two donuts, two bar charts) are labeled as that single class and kept
+    whole, so only a mix of types makes the composite `other`. Drawing the two
+    panels from independent picks would land on the same type ~1 in 7 times and
+    ship a mislabeled sample; ``rng.sample`` guarantees distinct types instead.
+    """
     pal = style.palette
     fig.delaxes(ax)
     fig.patch.set_facecolor(pal.background)
@@ -484,10 +494,11 @@ def _multi_chart(fig, ax, style, rng):
     band = fig.add_axes([0, 0.9, 1, 0.1]); band.axis("off")
     band.text(0.03, 0.5, rng.pick(list(_ORG_DE if style.language == "de" else _ORG_EN)),
               ha="left", va="center", color=pal.text, transform=band.transAxes, **_fk(style, 11, True))
+    kinds = rng.sample(_EMBEDDABLE, 2)  # two distinct chart types
     labels = []
-    for x0 in (0.04, 0.52):
+    for x0, kind in zip((0.04, 0.52), kinds):
         px = (int(fw * 0.44 * dpi), int(fh * 0.78 * dpi))
-        img, lb = _embed_chart(style, rng, px)
+        img, lb = _embed_chart(style, rng, px, allow=(kind,))
         _place_image(fig, [x0, 0.06, 0.44, 0.8], img)
         labels.append(lb)
     return {"sub_kind": "multi_chart", "embedded": labels}
@@ -520,28 +531,6 @@ def _table_with_bars(fig, ax, style, rng):
     ax.plot([4, 96], [bottom - 1, bottom - 1], color=rule, linewidth=1.0)
     ax.plot([48, 48], [bottom - 1, top + 3], color=mix(rule, pal.background, 0.4), linewidth=0.5)
     return {"sub_kind": "table_with_bars"}
-
-
-def _donut_progress(fig, ax, style, rng):
-    """
-    A ring as a *progress* indicator, not a part-to-whole breakdown -- `other`,
-    and the deliberate borderline case against pie_donut (design doc §5). Two
-    segments (done / remaining), a big percentage in the hole, a goal label.
-    """
-    pal = style.palette
-    _canvas(fig, ax, pal, rng)
-    val = rng.uniform(0.35, 0.92)
-    done = pal.color(0) if abs(_lum(pal.color(0)) - _lum(pal.background)) > 0.2 else pal.accent
-    rest = mix(pal.muted, pal.background, 0.6)
-    cx, cy, R = 50, 52, 30
-    width = R * rng.uniform(0.22, 0.4)  # thin ring -> reads as a donut
-    ax.add_patch(Wedge((cx, cy), R, 90 - val * 360, 90, facecolor=done, edgecolor="none", width=width))
-    ax.add_patch(Wedge((cx, cy), R, 90, 90 - val * 360, facecolor=rest, edgecolor="none", width=width))
-    ax.text(cx, cy, f"{round(val * 100)} %", ha="center", va="center", color=pal.text, **_fk(style, 18, True))
-    goal = (rng.pick(("Zielerreichung", "Fortschritt", "Umsetzungsgrad", "Auslastung"))
-            if style.language == "de" else rng.pick(("Progress", "Completion", "Utilisation")))
-    ax.text(cx, cy - R - 8, goal, ha="center", va="center", color=pal.muted, **_fk(style, style.tick_pt))
-    return {"sub_kind": "donut_progress"}
 
 
 def _mini(a, kind, style, rng, pal):
@@ -610,5 +599,4 @@ _DISPATCH = {
     "boxplot": _boxplot, "decorative": _decorative,
     "blank_artifact": _blank_artifact, "multi_chart": _multi_chart,
     "infographic_frame": _infographic_frame, "table_with_bars": _table_with_bars,
-    "donut_progress": _donut_progress,
 }

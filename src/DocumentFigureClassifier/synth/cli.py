@@ -34,8 +34,9 @@ from pathlib import Path
 
 from PIL import Image
 
+from ..taxonomy import TIER1_LABELS
 from . import degrade, photos
-from .config import REGISTRY, RunConfig, allocate
+from .config import REGISTRY, RunConfig, allocate, load_class_counts
 from .qa import contact_sheet, stats
 from .renderers.base import InvariantViolation, check
 from .rng import Rng
@@ -178,9 +179,16 @@ def main(argv: list[str] | None = None) -> int:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     ap.add_argument("--out", type=Path, default=Path("data/synth"), help="output root")
-    ap.add_argument("--n", type=int, default=200, help="samples per class")
+    ap.add_argument("--n", type=int, default=200, help="samples per class (uniform)")
     ap.add_argument(
         "--classes", default="", help="comma-separated subset; default is everything registered"
+    )
+    ap.add_argument(
+        "--counts-file",
+        type=Path,
+        default=None,
+        help="YAML plan of per-class counts (e.g. `bar: 1500`); overrides --n and cannot be "
+        "combined with --classes. Keys must be current tier-1 labels; see configs/synth_counts.yaml",
     )
     ap.add_argument("--seed", type=int, default=20260823)
     ap.add_argument("--workers", type=int, default=1, help="processes; 1 keeps tracebacks readable")
@@ -221,17 +229,43 @@ def main(argv: list[str] | None = None) -> int:
     if args.regenerate:
         return _regenerate(args.regenerate, cfg, args.dump_stages)
 
-    labels = [s for s in args.classes.split(",") if s] or list(REGISTRY)
-    unknown = [lb for lb in labels if lb not in REGISTRY and lb != "photo"]
-    if unknown:
-        log.error("not registered yet: %s (available: %s)", ", ".join(unknown), ", ".join(REGISTRY))
-        return 1
+    if args.counts_file:
+        if args.classes:
+            log.error("--counts-file and --classes cannot be combined; the file names the classes")
+            return 1
+        try:
+            counts = load_class_counts(args.counts_file)
+        except (OSError, ValueError) as exc:
+            log.error("counts file: %s", exc)
+            return 1
+        # Process in taxonomy order for stable, readable output; skip zeros.
+        labels = [c for c in TIER1_LABELS if counts.get(c, 0) > 0]
+        omitted = [c for c in TIER1_LABELS if c not in counts]
+        zeroed = sorted(c for c, n in counts.items() if n == 0)
+        if omitted:
+            log.info("counts file omits (not generated): %s", ", ".join(omitted))
+        if zeroed:
+            log.info("counts file sets 0 (skipped): %s", ", ".join(zeroed))
+        if counts.get("photo", 0) > 0:
+            log.info(
+                "photo count is advisory: photos are collected from the corpus (--photos-src) "
+                "at --photos-per-source each, not rendered to a target count"
+            )
+    else:
+        labels = [s for s in args.classes.split(",") if s] or list(REGISTRY)
+        unknown = [lb for lb in labels if lb not in REGISTRY and lb != "photo"]
+        if unknown:
+            log.error(
+                "not registered yet: %s (available: %s)", ", ".join(unknown), ", ".join(REGISTRY)
+            )
+            return 1
+        counts = {lb: args.n for lb in labels}
 
     tasks: list[tuple[str, str, int, RunConfig]] = []
     for label in labels:
         if label == "photo":
             continue  # collected from a corpus, not rendered -- see photos.py
-        for i, sub_type in enumerate(allocate(REGISTRY[label].subtypes, args.n)):
+        for i, sub_type in enumerate(allocate(REGISTRY[label].subtypes, counts[label])):
             tasks.append((label, sub_type, seed_for(args.seed, label, sub_type, i), cfg))
 
     log.info("generating %d samples across %d class(es)", len(tasks), len(labels))

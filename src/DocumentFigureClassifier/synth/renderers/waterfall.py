@@ -49,6 +49,11 @@ SUBTYPES = {
 }
 
 # (title, unit, magnitude, decimals, start label prefix)
+# "Brücke" / "Überleitung" ("bridge" / "reconciliation") is a near-perfect
+# waterfall tell -- if every title carried it, the model could shortcut on the
+# word's glyph shape. Roughly half of these use other phrasing ("Von X zu Y",
+# "Entwicklung ...", "Wertbeitrag"), and "Umsatzentwicklung" overlaps the line/
+# bar topic pool, so the bridge shape has to carry the class, not the caption.
 _BRIDGES_DE = (
     ("EBIT-Brücke", "Mio. €", 320, 0, "EBIT"),
     ("Umsatzbrücke", "Mio. €", 1800, 0, "Umsatz"),
@@ -58,6 +63,14 @@ _BRIDGES_DE = (
     ("Entwicklung Eigenkapital", "Mio. €", 2400, 0, "Eigenkapital"),
     ("Überleitung EBITDA", "Mio. €", 540, 0, "EBITDA"),
     ("Entwicklung Mitarbeiterzahl", "Mitarbeiter", 8600, 0, "Belegschaft"),
+    ("Von Umsatz zu EBIT", "Mio. €", 1800, 0, "Umsatz"),
+    ("Entwicklung des Konzernergebnisses", "Mio. €", 210, 0, "Ergebnis"),
+    ("Ergebnisbrücke", "Mio. €", 320, 0, "EBIT"),
+    ("Veränderung Free Cashflow", "Mio. €", 260, 0, "FCF"),
+    ("Überleitung operatives Ergebnis", "Mio. €", 480, 0, "Op. Ergebnis"),
+    ("Wertbeitrag", "Mio. €", 260, 0, "Wert"),
+    ("Umsatzentwicklung", "Mio. €", 1800, 0, "Umsatz"),
+    ("Bruttoergebnisbrücke", "Mio. €", 720, 0, "Bruttoergebnis"),
 )
 _BRIDGES_EN = (
     ("EBIT bridge", "€ m", 320, 0, "EBIT"),
@@ -66,6 +79,14 @@ _BRIDGES_EN = (
     ("Cash flow reconciliation", "€ m", 430, 0, "Cash flow"),
     ("Change in net income", "€ m", 210, 0, "Net income"),
     ("Headcount development", "employees", 8600, 0, "Headcount"),
+    ("From revenue to EBIT", "€ m", 1800, 0, "Revenue"),
+    ("Group earnings development", "€ m", 210, 0, "Earnings"),
+    ("Earnings bridge", "€ m", 320, 0, "EBIT"),
+    ("Change in free cash flow", "€ m", 260, 0, "FCF"),
+    ("Operating result reconciliation", "€ m", 480, 0, "Op. result"),
+    ("Value contribution", "€ m", 260, 0, "Value"),
+    ("Revenue development", "€ m", 1800, 0, "Revenue"),
+    ("Gross profit bridge", "€ m", 720, 0, "Gross profit"),
 )
 
 # Reasons for change -- feature 5. Never years, never categories.
@@ -99,12 +120,14 @@ def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
     title, unit, magnitude, dec, stem = rng.pick(_BRIDGES_DE if lang == "de" else _BRIDGES_EN)
 
     # A bridge needs a start, at least two changes and an end. Width caps it.
+    # Wide crops go up to 8 deltas (10 bars incl. start/end) so bridges get as
+    # busy as the real ones, not just the tidy 5-bar textbook shape.
     if style.fig_w_in < 2.4:
         n_delta = rng.randint(2, 3)
     elif style.fig_w_in < 3.6:
-        n_delta = rng.randint(2, 4)
+        n_delta = rng.randint(3, 5)
     else:
-        n_delta = rng.randint(3, 6)
+        n_delta = rng.randint(4, 8)
 
     y0 = rng.randint(2019, 2024)
     reasons = rng.sample(_REASONS_DE if lang == "de" else _REASONS_EN, n_delta)
@@ -118,14 +141,23 @@ def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
         deltas.append(size if rng.chance(0.62) else -size)
 
     items: list[tuple[str, str, float]] = [("start", f"{stem} {y0}", round(start, dec))]
-    for name, d in zip(reasons, deltas):
-        items.append(("delta", name, round(d, dec)))
 
+    # The `subtotals` sub-type interleaves 1-3 subtotal bars that drop back to
+    # the baseline showing the running total so far -- the messier, multi-stage
+    # reconciliation real reports print (gross -> operating -> net). A subtotal
+    # never removes a floating delta, so the invariant (>=2 floating bars) holds
+    # regardless of how many are inserted.
+    sub_after: set[int] = set()
+    sub_labels: list[str] = []
     if sub_type == "subtotals" and n_delta >= 3:
-        # Insert one subtotal bar back on the baseline, part-way through.
-        pos = rng.randint(2, n_delta - 1)
-        label = rng.pick(_SUBTOTALS_DE if lang == "de" else _SUBTOTALS_EN)
-        items.insert(pos + 1, ("subtotal", label, 0.0))
+        k = rng.randint(1, min(3, (n_delta - 1) // 2))
+        sub_after = set(rng.sample(range(2, n_delta), k))
+        sub_labels = rng.sample(_SUBTOTALS_DE if lang == "de" else _SUBTOTALS_EN, k)
+
+    for i, (name, d) in enumerate(zip(reasons, deltas), start=1):
+        items.append(("delta", name, round(d, dec)))
+        if i in sub_after:
+            items.append(("subtotal", sub_labels.pop(), 0.0))
 
     items.append(("end", f"{stem} {y0 + 1}", 0.0))
 
