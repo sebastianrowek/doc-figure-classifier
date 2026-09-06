@@ -162,6 +162,12 @@ interest rate development, sales trajectory.
   in for now — if the volume warrants it, split off later as `area`.
 - Lines with point markers.
 
+**Note — count data series, not strokes.** Gridlines, axis lines, target /
+reference lines, read-off guides and callout leaders are chart furniture and do
+not change the type. A chart is `line` if it has ≥1 data series drawn as a
+connected line in an x/y system, however many guide strokes surround it (e.g. a
+remuneration payout curve with an Ist-Wert marker → `line`).
+
 **Does not belong here:** A line together with bars → `combo_bar_line`.
 
 ### `combo_bar_line` — combo chart
@@ -240,9 +246,25 @@ trees, governance and structure charts.
 - Nodes with symbols inside them — as long as boxes and arrows form the
   structure.
 
+**Note — arrows are not required; the relationship is.** The test is "can you
+rewrite it as nodes + edges that carry meaning (reports-to, contains, precedes,
+decides)?". Hierarchy and containment expressed purely through **layout** —
+vertical levels, nesting, a box spanning the ones below it — count as
+connections even with no drawn arrows or lines. Org charts, governance/temple
+diagrams, and layered frameworks therefore go to `flow`. (For the parser this
+means edges must be inferred from geometry, not only traced from arrow glyphs.)
+
 **Does not belong here:**
+- A set of equal peer boxes with no hierarchy or sequence — a styled list or
+  icon grid where the only relation is "same category" → `other` (or `table`
+  if it is a real grid). If you cannot draw a meaningful edge, it is not `flow`.
 - Sankey diagrams (flows with proportional width) → `other` for now.
-- Timelines/roadmaps without connecting flow logic → `other`.
+- Timelines/roadmaps without connecting flow logic → `other`. Test: remove the
+  time axis — if it collapses to "events in date order" it is a timeline
+  (`other`); if a relational structure survives (a phase gates/enables the next,
+  branches) it is `flow`.
+- Pyramide-Visualizations
+- Circle-Diagrams without clear arrows or lines for connection
 
 **Note:** The base model (DocumentFigureClassifier) already knows flow charts, so
 fewer real training examples are needed than for a brand-new class. The class is
@@ -252,11 +274,22 @@ intended as a future parsing target.
 
 A pure row/column grid without graphical encoding of values.
 
-**Typical:** Key-figure overview, multi-year comparison, present as an image
-rather than as text in the PDF.
+**Typical:** Key-figure overview, multi-year comparison, or a qualitative
+grid (ESG/target table, governance principles), present as an image rather
+than as text in the PDF. Cells may hold **numbers or text** — content does
+not decide the class, structure does.
+
+**Note — merged cells and messy structure still count.** The test is
+"does a reader see a row/column grid?", not "would this serialize cleanly to
+a grid?". Merged/row-spanning cells, empty cells, subtotal or total rows, and
+narrative cells spanning several rows are all normal table constructs → still
+`table`. Clean parseability is the downstream extractor's job and is
+deliberately not encoded in the label.
 
 **Does not belong here:** Tables with embedded bars, traffic lights or
-sparklines — label these as `other` and note it in the notes column.
+sparklines — label these as `other` and note it in the notes column. Same for
+colour-coded grids like risk matrices / heatmaps (cells convey the value by
+colour, not text) → `other`.
 
 ### `photo` — photograph
 
@@ -274,6 +307,10 @@ rating symbols, icon sets in sustainability chapters, SDG tiles.
 
 **Boundary:** An icon **inside** a chart does not make the image `logo_icon` —
 what counts is the image content as a whole.
+
+**Does not belong here:**
+- Signatures
+- Large KPI-Boxes or -Figures
 
 ### `other` — miscellaneous
 

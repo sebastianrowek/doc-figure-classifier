@@ -161,6 +161,12 @@ Zinsentwicklung, Absatzverlauf.
   Vorerst zusammengefasst — bei relevantem Volumen später als `area` abtrennen.
 - Linien mit Punktmarkern.
 
+**Hinweis — Datenreihen zählen, nicht Striche.** Gitterlinien, Achsen, Ziel- /
+Referenzlinien, Ablese-Hilfslinien und Callout-Linien sind Diagramm-Beiwerk und
+ändern den Typ nicht. Ein Diagramm ist `line`, wenn es ≥1 Datenreihe als
+verbundene Linie in einem x/y-System zeigt — egal, wie viele Hilfsstriche darum
+liegen (z. B. eine Vergütungs-Zielerreichungskurve mit Ist-Wert-Marker → `line`).
+
 **Nicht hierher:** Linie zusammen mit Balken → `combo_bar_line`.
 
 ### `combo_bar_line` — Kombidiagramm
@@ -242,9 +248,28 @@ Entscheidungsbäume, Governance- und Aufbaustrukturen.
 - Horizontale wie vertikale Flussrichtung.
 - Knoten mit Symbolen darin — solange Kästen und Pfeile die Struktur bilden.
 
+**Hinweis — Pfeile sind nicht erforderlich, die Beziehung schon.** Der Test
+lautet „Lässt es sich als Knoten + Kanten mit Bedeutung schreiben (berichtet-an,
+enthält, geht-voran, entscheidet)?". Hierarchie und Enthaltensein, die allein
+durch das **Layout** ausgedrückt werden — vertikale Ebenen, Verschachtelung, ein
+Kasten, der die darunterliegenden überspannt — zählen auch ohne gezeichnete
+Pfeile oder Linien als Verbindung. Organigramme, Governance-/Tempel-Diagramme
+und geschichtete Frameworks gehören daher zu `flow`. (Für den Parser heißt das:
+Kanten müssen aus der Geometrie abgeleitet und nicht nur an Pfeilen abgelesen
+werden.)
+
 **Nicht hierher:**
+- Eine Reihe gleichrangiger Kästen ohne Hierarchie oder Reihenfolge — eine
+  gestaltete Liste oder ein Icon-Raster, deren einzige Beziehung „gleiche
+  Kategorie" ist → `other` (oder `table`, wenn es ein echtes Raster ist). Lässt
+  sich keine sinnvolle Kante ziehen, ist es kein `flow`.
 - Sankey-Diagramme (Flüsse mit proportionaler Breite) → vorerst `other`.
-- Zeitstrahlen/Roadmaps ohne verbindende Ablauflogik → `other`.
+- Zeitstrahlen/Roadmaps ohne verbindende Ablauflogik → `other`. Test: Zeitachse
+  entfernen — bleibt nur „Ereignisse in Datumsreihenfolge", ist es ein
+  Zeitstrahl (`other`); überlebt eine Beziehungsstruktur (eine Phase bedingt/
+  ermöglicht die nächste, Verzweigungen), ist es `flow`.
+- Pyramiden-Visualisierungen
+- Kreisdiagramme ohne klare Verbindungspfeile oder -linien
 
 **Hinweis:** Das Basismodell (DocumentFigureClassifier) kennt Flussdiagramme
 bereits, weshalb weniger echte Trainingsbeispiele nötig sind als für eine ganz
@@ -254,11 +279,23 @@ neue Klasse. Die Klasse ist als späteres Parsing-Ziel vorgesehen.
 
 Reines Zeilen-/Spaltenraster ohne grafische Kodierung von Werten.
 
-**Typisch:** Kennzahlenübersicht, Mehrjahresvergleich, die als Bild statt als
-Text im PDF vorliegt.
+**Typisch:** Kennzahlenübersicht, Mehrjahresvergleich oder ein qualitatives
+Raster (ESG-/Ziel-Tabelle, Governance-Grundsätze), das als Bild statt als
+Text im PDF vorliegt. Zellen dürfen **Zahlen oder Text** enthalten — nicht der
+Inhalt entscheidet über die Klasse, sondern die Struktur.
+
+**Hinweis — verbundene Zellen und unsaubere Struktur zählen mit.** Der Test
+lautet „Sieht ein Leser ein Zeilen-/Spaltenraster?", nicht „Ließe sich das
+sauber in ein Raster serialisieren?". Verbundene / zeilenübergreifende Zellen,
+leere Zellen, Zwischensummen- oder Summenzeilen und über mehrere Zeilen
+gespannte Fließtext-Zellen sind normale Tabellenbestandteile → weiterhin
+`table`. Die saubere Parsebarkeit ist Aufgabe des nachgelagerten Extraktors und
+wird bewusst nicht im Label kodiert.
 
 **Nicht hierher:** Tabellen mit eingebetteten Balken, Ampeln oder Sparklines —
-diese als `other` labeln und in der Notizspalte vermerken.
+diese als `other` labeln und in der Notizspalte vermerken. Ebenso farbcodierte
+Raster wie Risikomatrizen / Heatmaps (die Zellen tragen den Wert über die Farbe,
+nicht über Text) → `other`.
 
 ### `photo` — Fotografie
 
@@ -277,6 +314,10 @@ SDG-Kacheln.
 
 **Abgrenzung:** Ein Icon **innerhalb** eines Diagramms macht das Bild nicht zu
 `logo_icon` — es zählt der Bildinhalt als Ganzes.
+
+**Nicht hierher:**
+- Unterschriften
+- Große KPI-Kacheln oder -Zahlen
 
 ### `other` — Sonstiges
 
