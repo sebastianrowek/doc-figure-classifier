@@ -78,6 +78,31 @@ def build_model(pretrained: str = PRETRAINED_BACKBONE) -> EfficientNetForImageCl
     )
 
 
+def set_backbone_trainable(model: EfficientNetForImageClassification, trainable: bool) -> None:
+    """Freeze or unfreeze the pretrained backbone (``model.efficientnet``).
+
+    The classifier head (``model.classifier``) is never touched here -- it always
+    trains. Freezing the backbone for the first epoch lets the freshly random
+    head settle before its large early gradients are allowed to flow back and
+    perturb the good pretrained features (catastrophic forgetting)."""
+    for p in model.efficientnet.parameters():
+        p.requires_grad = trainable
+
+
+def param_groups(
+    model: EfficientNetForImageClassification, backbone_lr: float, head_lr: float
+) -> list[dict]:
+    """Two AdamW parameter groups: a low LR for the pretrained backbone and a
+    higher LR for the freshly initialised head. Both groups are present for the
+    whole run; while the backbone is frozen its params simply receive no gradient
+    and are skipped by the optimizer, so no optimizer rebuild is needed when it
+    unfreezes."""
+    return [
+        {"params": list(model.efficientnet.parameters()), "lr": backbone_lr},
+        {"params": list(model.classifier.parameters()), "lr": head_lr},
+    ]
+
+
 class FigureClassifier:
     """Inference wrapper around a fine-tuned 14-class checkpoint."""
 
