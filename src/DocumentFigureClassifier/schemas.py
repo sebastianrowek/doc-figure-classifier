@@ -25,7 +25,6 @@ class LlmClassifyConfig:
     require_parameters: bool = True
 
 
-
 # Allowlist of OpenRouter model slugs the judge eval may use. The runner's
 # ``--model`` flag validates against this, so it is the single source of truth
 # for which models are candidates. Add slugs as you decide to evaluate them.

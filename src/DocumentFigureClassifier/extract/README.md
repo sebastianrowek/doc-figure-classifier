@@ -56,16 +56,25 @@ In any case, before using the LLM-as-a-judge, the calibration needs to be run wi
 
 Input PDFs are German annual reports (`Geschäftsbericht`) from listed companies,
 named `{company}_ann_rep_{year}.pdf`. Training reports live in `data/reports/`;
-held-out **test** reports (companies not used for training) live in
-`data/reports/test/`. Download with a browser `User-Agent` on curl — several IR
-sites 403 plain requests.
+held-out **test** reports (one year per company) live in `data/reports/test/`;
+extra held-out companies with **4 mixed years each** (2017–2025) live in
+`data/reports/candidates/`. Download with a browser `User-Agent` on curl —
+several IR sites 403 plain requests; for reports pulled from a company's site
+after it was reorganised, the Wayback Machine (`web.archive.org/web/<ts>id_/…`)
+still serves the original PDF (note: its replay caps some files at 5 MiB — pick a
+snapshot whose CDX length is under that).
 
-**Candidates for more reports** (not yet collected, publish a German
-`Geschäftsbericht`): Gerresheimer, Jungheinrich, Ströer, Fuchs SE, Fielmann,
-Freenet, K+S, HOCHTIEF, BayWa, KWS Saat, SMA Solar, PVA TePla, Talanx (full
-report is behind a gated URL — needs a real browser).
+**Collected into `candidates/`** (4 years each unless noted): Gerresheimer,
+Jungheinrich, Fuchs, Fielmann, Freenet, K+S (`ks_*`), HOCHTIEF, BayWa, KWS,
+SMA Solar (`sma_*`), PVA TePla (`pvatepla_*`, via Wayback), Ströer (only 2 —
+2022 & 2024; it publishes an online report, not standalone `Geschäftsbericht`
+PDFs, so other years offer only thin financial-statement PDFs).
 
-Skip: Airbus, QIAGEN, Zalando — English-only, no German `Geschäftsbericht`.
+**Still untapped candidates** (German `Geschäftsbericht`, not yet collected):
+Talanx (full report behind a gated `_pw` URL — needs a real browser), Evotec,
+Aixtron, Verbio, Stabilus, adesso, SAF-Holland, Suss MicroTec, Wacker Neuson.
+
+Skip: Airbus, QIAGEN, Zalando, and PVA TePla's *current* site — English-only.
 
 ## Setup
 

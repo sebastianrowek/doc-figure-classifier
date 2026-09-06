@@ -126,6 +126,7 @@ import torchvision.transforms as transforms
 from PIL import Image
 from transformers import EfficientNetForImageClassification
 
+from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
@@ -304,8 +305,33 @@ def build_converter(
     elif device != "auto":
         log.warning("this docling version has no accelerator options; --device ignored")
 
+    # Rasterize pages with pypdfium2 instead of docling's default backend
+    # (ThreadedDoclingParseDocumentBackend). That default hands page rendering to
+    # docling-parse's native rasterizer, which hangs -- not "runs slowly", but
+    # spins one core at 100% forever with no I/O -- on certain page-content x
+    # scale combinations. It cost a 19-hour stall on page 46 of
+    # brit_am_tobacco_ann_rep_2018_en.pdf at the default --scale 2.0.
+    #
+    # The trigger is a narrow, deterministic, content-dependent set of scale
+    # values, NOT "big pages are slow": the same page renders in 0.3 s at scale
+    # 1.999, 2.01, 2.05 and 3.0, and hangs at 2.0, 2.001 and 2.02. PyMuPDF and
+    # pypdfium2 both render it in under 0.1 s at exactly the size that hangs, so
+    # the PDF itself is sound. Seen with docling 2.123.1 / docling-parse 7.16.0.
+    #
+    # The swap is not pixel-neutral. The layout model sees a different
+    # rasterizer's output, so region detection shifts slightly: on a 41-page
+    # sample, 69 of 70 pictures matched at mean IoU 0.95 (tables at 0.99) with
+    # zero byte-identical crops, and the two backends disagreed on one
+    # merge/split and one duplicate table/picture detection. Crops are therefore
+    # NOT reproducible across the swap, and because crop_id counts up per
+    # document, one added region renumbers every later crop in that PDF. Process
+    # a corpus with one backend throughout.
     return DocumentConverter(
-        format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}
+        format_options={
+            InputFormat.PDF: PdfFormatOption(
+                pipeline_options=opts, backend=PyPdfiumDocumentBackend
+            )
+        }
     )
 
 
