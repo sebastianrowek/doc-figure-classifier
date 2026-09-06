@@ -73,6 +73,21 @@
   #status.ok { color: var(--good); }
   #status.warn { color: var(--warn); }
 
+  /* A root/manifest problem has to stay on screen until it is fixed -- the
+     status line above is transient and the next action overwrites it. */
+  #banner { display: none; gap: 10px; align-items: flex-start;
+            border-radius: 8px; padding: 8px 12px; font-size: .85rem; line-height: 1.45; }
+  #banner.show { display: flex; }
+  #banner .ic { flex: none; }
+  #banner b { display: block; }
+  #banner.warn { background: #33280f; border: 1px solid var(--warn); color: #f0d9a6; }
+  #banner.warn b { color: var(--warn); }
+  #banner.err { background: #341816; border: 1px solid var(--danger); color: #f2bcb8; }
+  #banner.err b { color: var(--danger); }
+  #manifestInput.bad { border-color: var(--danger); }
+  #manifestInput.suspect { border-color: var(--warn); }
+  body.busy { cursor: progress; }
+
   /* -------- main layout -------- */
   main { flex: 1; display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
   .viewer {
@@ -198,7 +213,8 @@
   </div>
   <div class="row">
     <span class="field-label">Manifest</span>
-    <input type="text" id="manifestInput" class="grow" placeholder="Path to manifest.jsonl (optional)" />
+    <input type="text" id="manifestInput" class="grow"
+           placeholder="Path to manifest.jsonl — applied on Enter / when you leave the field" />
     <span class="field-label">Reviewing</span>
     <select id="subSelect" disabled><option>—</option></select>
     <span class="sep"></span>
@@ -213,6 +229,7 @@
     <span class="sep"></span>
     <span class="pill" id="filterInfo">—</span>
   </div>
+  <div id="banner"></div>
   <div id="status"></div>
 </header>
 
@@ -279,12 +296,13 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
-const api = async (path) => {
-  const r = await fetch(path);
+const api = async (path, signal) => {
+  const r = await fetch(path, signal ? { signal } : undefined);
   const j = await r.json();
   if (!r.ok || j.error) throw new Error(j.error || ("HTTP " + r.status));
   return j;
 };
+const aborted = (e) => e && (e.name === "AbortError" || e.code === 20);
 
 const state = {
   root: "",
@@ -301,7 +319,10 @@ const state = {
   listening: null,      // folder currently waiting for a new key binding
   undo: [],             // stack of { file, prev, sub } for Ctrl+Z
   bg: "checker",
-  rootManifestMismatch: false,  // manifest lives outside this root's dataset folder
+  rootManifestMismatch: false,  // manifest doesn't belong to this root's dataset
+  manifestState: null,  // last /api/images or /api/check verdict on the pairing
+  loadSeq: 0,           // newest load wins; older responses are dropped
+  abort: null,          // AbortController for the in-flight load
 };
 
 /* ------------------------- persistence helpers ------------------------- */
@@ -311,6 +332,7 @@ const LS = {
   bg: "figlabel:bg",
   order: (root, sub) => `figlabel:order:${root}|${sub}`,
   keys: (root) => `figlabel:keys:${root}`,
+  sub: (root) => `figlabel:sub:${root}`,
   thresh: "figlabel:thresh",
 };
 function saveOrder() {
@@ -341,6 +363,90 @@ function loadOrder(folderNames) {
 /* ------------------------------ status -------------------------------- */
 function status(msg, kind = "") { const el = $("status"); el.textContent = msg; el.className = kind; }
 
+/* --------------------- one load at a time, newest wins ----------------- */
+// A folder listing can be several MB. Without this, flipping through the
+// subfolder dropdown left several requests racing and a slow early response
+// could land last and repaint stale images.
+function beginLoad(msg) {
+  if (state.abort) state.abort.abort();
+  state.abort = new AbortController();
+  setBusy(true);
+  if (msg) status(msg);
+  return ++state.loadSeq;
+}
+function endLoad(seq) {
+  if (seq !== state.loadSeq) return false;  // a newer load took over
+  setBusy(false);
+  return true;
+}
+function setBusy(on) {
+  $("loadBtn").disabled = on;
+  $("browseBtn").disabled = on;
+  $("subSelect").disabled = on || !state.folders.length;
+  document.body.classList.toggle("busy", on);
+}
+function showLoading(label) {
+  $("img").style.display = "none";
+  const empty = $("stageEmpty");
+  empty.style.display = "";
+  empty.textContent = label;
+}
+
+/* ---------------------- root <-> manifest banner ----------------------- */
+// Wrong-manifest problems are easy to miss and cost real work (the files move
+// but their labels never reach the manifest), so they get a banner that stays
+// put instead of a status line the next keystroke wipes.
+const BANNER = {
+  outside: ["err", "Root folder and manifest do not match"],
+  no_match: ["err", "Root folder and manifest do not match"],
+  missing: ["err", "Manifest not found"],
+  none: ["warn", "No manifest selected"],
+};
+function setManifestState(ms) {
+  state.manifestState = ms || null;
+  state.rootManifestMismatch =
+    !!ms && (ms.status === "outside" || ms.status === "no_match");
+  renderBanner();
+}
+function renderBanner() {
+  const el = $("banner");
+  const inp = $("manifestInput");
+  const ms = state.manifestState;
+  const spec = ms ? BANNER[ms.status] : null;
+  inp.classList.toggle("bad", !!spec && spec[0] === "err");
+  inp.classList.toggle("suspect", !!spec && spec[0] === "warn");
+  if (!spec) { el.className = ""; el.innerHTML = ""; return; }
+  el.className = "show " + spec[0];
+  el.innerHTML =
+    `<span class="ic">${spec[0] === "err" ? "\u26d4" : "\u26a0"}</span>` +
+    `<span><b>${spec[1]}</b>${escapeHtml(ms.message || "")}</span>`;
+}
+// Cheap re-validation of the current pairing (no image list).
+async function checkManifest() {
+  if (!state.root) return;
+  try {
+    setManifestState(
+      (await api(
+        "/api/check?root=" + encodeURIComponent(state.root) +
+        "&manifest=" + encodeURIComponent(state.manifest) +
+        "&sub=" + encodeURIComponent(state.currentSub || "")
+      )).manifest
+    );
+  } catch (e) { /* keep whatever the last successful check said */ }
+}
+// The manifest field applies on its own. It used to be read only inside
+// loadFolders(), so editing it and then switching subfolders silently kept
+// using the previous manifest -- including for the mismatch warning.
+async function applyManifest() {
+  const next = $("manifestInput").value.trim();
+  if (next === state.manifest) return;
+  state.manifest = next;
+  try { localStorage.setItem(LS.manifest, next); } catch (e) {}
+  if (!state.root) return;
+  if (state.currentSub) await selectSubfolder(state.currentSub, { keep: true });
+  else await checkManifest();
+}
+
 /* --------------------------- pending state ---------------------------- */
 function pendingList() {
   return Object.entries(state.assignments)
@@ -356,67 +462,88 @@ function refreshPending() {
 }
 
 /* ----------------------------- folders -------------------------------- */
-async function loadFolders() {
+// `prefer` picks the subfolder to open afterwards; without it the last folder
+// reviewed under this root wins, then the first non-empty one. Opening the
+// wrong folder first is not free -- some hold >16k crops.
+async function loadFolders(prefer) {
   const root = $("rootInput").value.trim();
   if (!root) { status("Enter or browse to a root folder first.", "err"); return; }
-  status("Loading folders…");
+  // Read the manifest field up front: a failed root load used to leave
+  // state.manifest pointing at whatever was loaded before.
+  state.manifest = $("manifestInput").value.trim();
+  try { localStorage.setItem(LS.manifest, state.manifest); } catch (e) {}
+  const seq = beginLoad("Loading folders…");
   try {
-    const j = await api("/api/folders?root=" + encodeURIComponent(root));
+    const j = await api("/api/folders?root=" + encodeURIComponent(root), state.abort.signal);
+    if (seq !== state.loadSeq) return;
     state.root = j.root;
     $("rootInput").value = j.root;
     state.folders = j.folders;
-    state.manifest = $("manifestInput").value.trim();
     state.keymap = loadKeys(j.folders.map((f) => f.name));
-    try { localStorage.setItem(LS.root, j.root); localStorage.setItem(LS.manifest, state.manifest); } catch (e) {}
+    try { localStorage.setItem(LS.root, j.root); } catch (e) {}
 
     const sel = $("subSelect");
     sel.innerHTML = "";
     if (!j.folders.length) {
-      sel.innerHTML = "<option>— no subfolders —</option>"; sel.disabled = true;
-      status("No subfolders found in that root.", "err"); return;
+      sel.innerHTML = "<option>— no subfolders —</option>";
+      endLoad(seq); sel.disabled = true;
+      status("No subfolders found in that root.", "err");
+      await checkManifest();
+      return;
     }
     for (const f of j.folders) {
       const o = document.createElement("option");
       o.value = f.name; o.textContent = `${f.name}  (${f.count})`;
       sel.appendChild(o);
     }
-    sel.disabled = false;
-    status(`Loaded ${j.folders.length} subfolders. Choose one to review.`, "ok");
-    // Auto-select the first non-empty folder, else the first.
-    const firstNonEmpty = j.folders.find((f) => f.count > 0) || j.folders[0];
-    sel.value = firstNonEmpty.name;
-    await selectSubfolder(firstNonEmpty.name);
+    let want = null;
+    try { want = localStorage.getItem(LS.sub(state.root)); } catch (e) {}
+    const has = (n) => n && j.folders.some((f) => f.name === n);
+    const pick = (has(prefer) && prefer) || (has(want) && want) ||
+      (j.folders.find((f) => f.count > 0) || j.folders[0]).name;
+    sel.value = pick;
+    endLoad(seq);
+    await selectSubfolder(pick);
   } catch (e) {
+    if (aborted(e) || seq !== state.loadSeq) return;
+    endLoad(seq);
     status("Could not load folders: " + e.message, "err");
   }
 }
 
-async function selectSubfolder(name) {
+// `opts.keep` reloads the folder without losing the image you were on -- used
+// when only the manifest changed.
+async function selectSubfolder(name, opts = {}) {
   state.currentSub = name;
-  status(`Loading “${name}”…`);
+  try { localStorage.setItem(LS.sub(state.root), name); } catch (e) {}
+  const seq = beginLoad(`Loading “${name}”…`);
+  if (!opts.keep) showLoading(`Loading “${name}”…`);
   try {
     const url = "/api/images?root=" + encodeURIComponent(state.root) +
       "&sub=" + encodeURIComponent(name) +
       "&manifest=" + encodeURIComponent(state.manifest);
-    const j = await api(url);
+    const j = await api(url, state.abort.signal);
+    if (seq !== state.loadSeq) return;
     state.allImages = j.images.map((im) => ({ ...im, conf: parseConf(im.file, im.meta) }));
-    state.idx = 0;
+    if (!opts.keep) state.idx = 0;
     // Chips = every sibling folder except the one we're reviewing.
     const dests = state.folders.map((f) => f.name).filter((n) => n !== name);
     state.order = loadOrder(dests);
     renderChips();
-    applyFilter();  // sets state.images + renders
-    state.rootManifestMismatch = !!j.root_manifest_mismatch;
-    if (j.root_manifest_mismatch) {
-      status("⚠ " + (j.warning || "Manifest is outside this root's folder — commits won't update it."), "warn");
-    } else if (!j.manifest_found) {
-      status(`Reviewing “${name}” — ${j.images.length} image(s).  (manifest not found — moves will still work, but manual_root won't be written)`, "");
-    } else {
-      status(`Reviewing “${name}” — ${j.images.length} image(s).`, "ok");
-    }
+    applyFilter();  // sets state.images + renders (keeps the current file if it survives)
+    setManifestState(j.manifest);
+    endLoad(seq);
+
+    const ms = j.manifest || {};
+    const partial = ms.status === "ok" && ms.matched != null && ms.matched < ms.checked
+      ? ` — ${ms.checked - ms.matched} without a manifest record` : "";
+    status(`Reviewing “${name}” — ${j.images.length} image(s)${partial}.`,
+           ms.status === "ok" ? "ok" : "");
   } catch (e) {
+    if (aborted(e) || seq !== state.loadSeq) return;
+    endLoad(seq);
     status("Could not load images: " + e.message, "err");
-    state.allImages = []; state.images = []; applyFilter();
+    state.allImages = []; state.images = []; state.idx = 0; applyFilter();
   }
 }
 
@@ -486,9 +613,7 @@ function render() {
 
   const cur = state.images[state.idx];
   empty.style.display = "none"; img.style.display = "";
-  img.src = "/img?root=" + encodeURIComponent(state.root) +
-    "&sub=" + encodeURIComponent(state.currentSub) +
-    "&file=" + encodeURIComponent(cur.file);
+  img.src = imgUrl(cur.file);
   $("fname").textContent = cur.file;
 
   // Assignment tag
@@ -521,7 +646,7 @@ function render() {
     meta.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${escapeHtml(String(v))}</dd>`).join("");
   } else { meta.style.display = "none"; }
 
-  preload(state.idx + 1);
+  preload(state.idx + 1, state.idx + 2, state.idx - 1);
   renderChips();
 }
 
@@ -529,12 +654,18 @@ function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
 
-function preload(i) {
-  if (i < 0 || i >= state.images.length) return;
-  const im = new Image();
-  im.src = "/img?root=" + encodeURIComponent(state.root) +
+function imgUrl(file) {
+  return "/img?root=" + encodeURIComponent(state.root) +
     "&sub=" + encodeURIComponent(state.currentSub) +
-    "&file=" + encodeURIComponent(state.images[i].file);
+    "&file=" + encodeURIComponent(file);
+}
+// The server lets the browser cache crops, so warming neighbours in both
+// directions makes stepping through a folder feel instant.
+function preload(...idxs) {
+  for (const i of idxs) {
+    if (i < 0 || i >= state.images.length) continue;
+    new Image().src = imgUrl(state.images[i].file);
+  }
 }
 
 /* ------------------------------ chips --------------------------------- */
@@ -719,10 +850,9 @@ async function commit() {
     for (const file of Object.keys(state.assignments)) if (movedSet.has(file)) delete state.assignments[file];
     state.undo = [];  // moved files are on disk now; can't undo via the in-memory stack
     showReport(rep);
-    // Reload counts + current folder to reflect the moves.
-    const keepSub = state.currentSub;
-    await loadFolders();
-    if (state.folders.some((f) => f.name === keepSub)) { $("subSelect").value = keepSub; await selectSubfolder(keepSub); }
+    // Reload counts + current folder to reflect the moves. Passing the folder
+    // through avoids loading some other folder's images on the way back.
+    await loadFolders(state.currentSub);
   } catch (e) {
     status("Commit failed: " + e.message, "err");
   } finally {
@@ -798,8 +928,10 @@ function applyBg() {
 }
 
 /* ------------------------------ events -------------------------------- */
-$("loadBtn").addEventListener("click", loadFolders);
+$("loadBtn").addEventListener("click", () => loadFolders());
 $("rootInput").addEventListener("keydown", (e) => { if (e.key === "Enter") loadFolders(); });
+$("manifestInput").addEventListener("change", applyManifest);
+$("manifestInput").addEventListener("keydown", (e) => { if (e.key === "Enter") applyManifest(); });
 $("subSelect").addEventListener("change", (e) => selectSubfolder(e.target.value));
 $("commitBtn").addEventListener("click", commit);
 $("keepBtn").addEventListener("click", keepAndNext);
@@ -848,6 +980,7 @@ async function init() {
     try { root = localStorage.getItem(LS.root) || ""; manifest = localStorage.getItem(LS.manifest) || ""; } catch (e) {}
     $("rootInput").value = root || d.root || "";
     $("manifestInput").value = manifest || d.manifest || "";
+    state.manifest = $("manifestInput").value.trim();
     try { state.bg = localStorage.getItem(LS.bg) || "checker"; } catch (e) {}
     applyBg();
     let t = 1;
@@ -856,7 +989,7 @@ async function init() {
     $("threshSlider").value = state.threshold;
     $("threshNum").value = state.threshold.toFixed(2);
     refreshFilterInfo();
-    if ($("rootInput").value) loadFolders();
+    if ($("rootInput").value) await loadFolders();
   } catch (e) {
     status("Server not reachable: " + e.message, "err");
   }
