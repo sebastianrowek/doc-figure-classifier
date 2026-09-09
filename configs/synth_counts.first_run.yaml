@@ -18,7 +18,6 @@ other:           400   # real 1273 -> 1673  covered; synth for R1/R2 + blank_art
 bar:             500   # real  521 -> 1021  good base; synth for axis-less/style + target_line
 pie_donut:       500   # real  435 ->  935
 line:            700   # real  203 ->  903
-logo_icon:       600   # real  174 ->  774  synth = invented marks, keep in check
 flow:            700   # real  151 ->  851
 bar_stacked:     800   # real  138 ->  938  thin + waterfall confusion
 bar_grouped:     800   # real  132 ->  932  thin + harder to parse

@@ -26,8 +26,7 @@ scatter:         900   # incl. bubble + trend-line look-alike
 flow:            900    # org / process / cycle
 map:             900
 table:          1200
-logo_icon:       900
-other:          2100   # 14 sub-types
+other:          2100   # incl. logos/pictograms (formerly the logo_icon class)
 
 # photo is collected from a real corpus via --photos-src, not rendered to a
 # target count; listing it here only toggles collection on. Uncomment to enable:

@@ -1,10 +1,15 @@
 """
 Logos and pictograms -- brand marks, seals, awards, icon sets, SDG-style tiles.
 
-This class is entirely procedural: real logos cannot be used (trademark), and
-the model does not need real ones -- it needs to learn the *shape* of the class,
-a single centred mark on empty ground with no axes and no data series. That is
-also the invariant (base._check_logo): no bar, line or pie series present.
+`logo_icon` was merged into `other` (2026-09). Logos are no longer a top-level
+class; they are generated as the `logo` sub-type of `other` -- renderers.other's
+`_logo` dispatch calls `logos.draw`, so the mark lands in the `other` folder.
+`render_logo` stays as a standalone entry point sharing the same `draw` core.
+
+Logos are entirely procedural: real logos cannot be used (trademark), and the
+model does not need real ones -- it needs to learn the *shape*: a single centred
+mark on empty ground with no axes and no data series. (`other` has an open
+invariant, so no per-logo check is needed.)
 
 Everything is drawn as matplotlib patches on an equal-aspect, axis-off canvas.
 The SDG tiles are an original design, deliberately not the UN colour set or
@@ -62,8 +67,9 @@ def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
     if rng.chance(0.5):
         name = name + rng.pick(("tec", "ex", "on", "va", "co", "is", "ia"))
     suffix = rng.pick(_NAME_SUFFIX) if rng.chance(0.6) else ""
+    # label="other": logos are a sub-type of the `other` class since the merge.
     return FigureSpec(
-        label="logo_icon", sub_type=sub_type,
+        label="other", sub_type=sub_type,
         title=None, subtitle=None, source=None, unit="",
         categories=[], series=[], series_names=[],
         decimals=0, percent=False,
@@ -71,16 +77,29 @@ def build_spec(sub_type: str, style: StyleSheet, rng: Rng) -> FigureSpec:
     )
 
 
+def pick_subtype(rng: Rng) -> str:
+    """Weighted pick over SUBTYPES. The class-level allocator only sees a single
+    `logo` slot under `other`, so the logo-style mix (wordmark/seal/...) is drawn
+    here instead."""
+    r = rng.uniform(0.0, sum(SUBTYPES.values()))
+    acc = 0.0
+    for k, w in SUBTYPES.items():
+        acc += w
+        if r <= acc:
+            return k
+    return next(reversed(SUBTYPES))
+
+
 # --------------------------------------------------------------------------
 # Render
 # --------------------------------------------------------------------------
 
 
-def render_logo(spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float) -> RenderResult:
-    from ..engines import mpl
-
+def draw(fig, ax, spec: FigureSpec, style: StyleSheet, rng: Rng) -> None:
+    """Draw the logo described by ``spec`` onto an existing fig/ax (no figure
+    creation). Shared by the standalone ``render_logo`` and by renderers.other's
+    ``logo`` sub-type, so both produce identical marks."""
     pal = style.palette
-    fig, ax = mpl.new_figure(style, oversample)
     fig.subplots_adjust(left=0.02, right=0.98, top=0.98, bottom=0.02)
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
@@ -104,6 +123,12 @@ def render_logo(spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float
     else:
         _sdg_tiles(ax, spec, style, rng, pal, bg)
 
+
+def render_logo(spec: FigureSpec, style: StyleSheet, rng: Rng, oversample: float) -> RenderResult:
+    from ..engines import mpl
+
+    fig, ax = mpl.new_figure(style, oversample)
+    draw(fig, ax, spec, style, rng)
     image = mpl.to_pil(fig)
     fig.clear()
     return RenderResult(image=image, structure=Structure(), meta={"legend": "none", "yaxis": False})

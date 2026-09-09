@@ -1,11 +1,11 @@
 """
 The figure classifier: docling's EfficientNet backbone re-fitted from its
-original 26-class head to our 14 Tier-1 labels (taxonomy.TIER1_LABELS).
+original 26-class head to our Tier-1 labels (taxonomy.TIER1_LABELS).
 
 Two entry points:
   build_model()     -> a model ready to fine-tune. The pretrained backbone is
                        loaded and its classifier head is thrown away and
-                       reinitialised for 14 classes.
+                       reinitialised for the Tier-1 labels.
   FigureClassifier  -> load a fine-tuned checkpoint and predict on PIL images.
 """
 
@@ -62,7 +62,8 @@ def make_transform(train: bool = False) -> T.Compose:
 
 
 def build_model(pretrained: str = PRETRAINED_BACKBONE) -> EfficientNetForImageClassification:
-    """Load the pretrained backbone and swap in a fresh 14-way classifier head.
+    """Load the pretrained backbone and swap in a fresh classifier head sized to
+    the Tier-1 labels.
 
     `ignore_mismatched_sizes=True` is what does the replacement: every backbone
     weight is loaded, and only the classifier layer -- whose shape no longer
@@ -79,7 +80,7 @@ def build_model(pretrained: str = PRETRAINED_BACKBONE) -> EfficientNetForImageCl
 
 
 def load_finetuned_for_training(checkpoint: str | Path) -> EfficientNetForImageClassification:
-    """Load an already-14-class checkpoint (e.g. the Stage-1 output) to keep
+    """Load an already-fine-tuned Tier-1 checkpoint (e.g. the Stage-1 output) to keep
     training from it. Unlike build_model, nothing is reinitialised: the trained
     head is kept intact. Used by Stage 2, which continues from the Stage-1 model
     rather than starting over from the docling backbone.
@@ -116,7 +117,7 @@ def param_groups(
 
 
 class FigureClassifier:
-    """Inference wrapper around a fine-tuned 14-class checkpoint."""
+    """Inference wrapper around a fine-tuned Tier-1 checkpoint."""
 
     def __init__(self, model_dir: str | Path, device: str = "cpu", batch_size: int = 16):
         model_dir = Path(model_dir)
@@ -132,7 +133,7 @@ class FigureClassifier:
 
     @torch.no_grad()
     def predict_proba(self, images: Sequence[Image.Image]) -> torch.Tensor:
-        """Full softmax distribution over the 14 classes, shape (N, 14).
+        """Full softmax distribution over the Tier-1 classes, shape (N, C).
 
         Use this for calibration / loss / confusion analysis -- it keeps the
         whole distribution, not just the winning class.

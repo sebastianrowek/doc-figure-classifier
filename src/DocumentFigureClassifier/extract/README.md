@@ -11,10 +11,10 @@ extract and crop figures and tables from corporate PDFs
 - This is a baseline since the model is already capable of detecting certain figure 
 classes that we can use in the next step
 
-3. Map its 26 classes to the **new** 14 figure classes the fine-tuned classifier should
+3. Map its 26 classes to the **new** 13 figure classes the fine-tuned classifier should
 output (Tier1-Labels, see `taxonomy.py`)
 - Part of the existing classes can be mapped 1-to-1 and may only get a rename (`pie_chart` -> `pie_donut`)
-- Some classes are consolidated because the detail is not needed (`logo`, `icon`, `stamp`, `signature` -> `logo_icon` )
+- Some classes are consolidated because the detail is not needed (`logo`, `icon`, `stamp`, `signature` -> `other`; logos/pictograms were merged into `other`)
 - Other classes will be expanded to XX for more detailed classification (`bar_chart` -> `bar`, `bar_stacked`, `bar_grouped`). For these classes, only the base label is provided (`bar` in the example) and further
 processing is needed to assign the fine-grained class labels
 

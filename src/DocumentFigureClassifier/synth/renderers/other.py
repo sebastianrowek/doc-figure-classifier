@@ -39,6 +39,7 @@ from ..engines import mpl
 from ..palettes import darken, lighten, mix, ramp, readable_on
 from ..rng import Rng
 from ..style import StyleSheet
+from . import logos
 from .base import FigureSpec, RenderResult, Structure
 
 # org_chart / process_flow moved out to the `flow` class, and scatter / bubble
@@ -59,6 +60,10 @@ SUBTYPES = {
     "infographic_frame": 0.04,
     # Named hard variant from the guide / design doc §5.
     "table_with_bars": 0.06,
+    # logo_icon was merged into `other` (2026-09); logos are now a sub-type here,
+    # drawn by renderers.logos. Weight is a share of the class (allocate()
+    # normalises by the total, so the other weights need not be rescaled).
+    "logo": 0.15,
 }
 
 
@@ -587,6 +592,16 @@ def _infographic_frame(fig, ax, style, rng):
             "embedded": emb}
 
 
+def _logo(fig, ax, style, rng):
+    """A procedural logo / pictogram mark. Logos were their own `logo_icon` class
+    until the 2026-09 merge into `other`; they are now this sub-type, rendered by
+    renderers.logos onto the shared figure. The logo-style mix (wordmark / seal /
+    badge / icon_grid / sdg_tiles) is drawn by logos.pick_subtype."""
+    spec = logos.build_spec(logos.pick_subtype(rng), style, rng)
+    logos.draw(fig, ax, spec, style, rng)
+    return {"sub_kind": "logo", "logo_style": spec.sub_type}
+
+
 def _lum(c: str) -> float:
     from ..palettes import luminance
     return luminance(c)
@@ -599,4 +614,5 @@ _DISPATCH = {
     "boxplot": _boxplot, "decorative": _decorative,
     "blank_artifact": _blank_artifact, "multi_chart": _multi_chart,
     "infographic_frame": _infographic_frame, "table_with_bars": _table_with_bars,
+    "logo": _logo,
 }

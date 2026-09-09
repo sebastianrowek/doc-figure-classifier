@@ -22,7 +22,6 @@ TIER1_LABELS = [
     "map",
     "table",
     "photo",
-    "logo_icon",
     "other",
 ]
 

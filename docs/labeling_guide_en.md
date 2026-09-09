@@ -30,8 +30,7 @@ decision tree in section 2 decides, not your gut.
 | `map` | Karte | Geographic representation |
 | `table` | Tabelle | Row/column grid without graphical encoding |
 | `photo` | Foto | Photographic image |
-| `logo_icon` | Logo / Piktogramm | Brand, seal, icon, award |
-| `other` | Sonstiges | Anything that fits none of the above |
+| `other` | Sonstiges | Logos, seals, icons/pictograms, and anything that fits none of the above |
 
 ---
 
@@ -41,7 +40,7 @@ Work top to bottom, stop at the first match.
 
 ```
 1.  Is it a photograph (people, buildings, products)?          → photo
-2.  Is it a logo, seal, award or pictogram?                    → logo_icon
+2.  Is it a logo, seal, award or pictogram?                    → other
 3.  Does the image show charts of MULTIPLE DIFFERENT types?    → Rule R1 (section 4)
 4.  Is a geographic map the dominant element?                  → map
 5.  Boxes/nodes connected by arrows (process/org chart)?       → flow
@@ -300,24 +299,14 @@ This class matters more than it looks: annual reports consist visually to a
 substantial degree of photography, and the model must learn to reject it
 reliably.
 
-### `logo_icon` — logo and pictogram
-
-**Typical:** Group and brand logos, certification seals (ISO, FSC), awards,
-rating symbols, icon sets in sustainability chapters, SDG tiles.
-
-**Boundary:** An icon **inside** a chart does not make the image `logo_icon` —
-what counts is the image content as a whole.
-
-**Does not belong here:**
-- Signatures
-- Large KPI-Boxes or -Figures
-
-### `other` — miscellaneous
+### `other` — miscellaneous (incl. logos and pictograms)
 
 Catch-all class. Not optional: without it the model produces confident false
 statements for everything it does not know.
 
 **Typical:**
+- Group and brand logos, certification seals (ISO, FSC), awards, rating symbols,
+  icon sets in sustainability chapters, SDG tiles, pictograms
 - Timelines, milestones, roadmaps
 - Materiality and risk matrices
 - KPI tiles (large number + label + arrow)
@@ -325,8 +314,12 @@ statements for everything it does not know.
 - Sankey, radar, tornado
 - Decorative graphics, separators, extraction artifacts, empty crops
 
+**Boundary:** An icon or logo **inside** a chart does not make the image
+`other` — what counts is the image content as a whole.
+
 Org charts and flow diagrams now go to `flow`, bubble charts to `scatter` — no
-longer here.
+longer here. (Logos and pictograms, previously their own `logo_icon` class, now
+belong here.)
 
 If one of these subcategories occurs frequently, note it in the notes field.
 Past a certain volume it is worth its own class (see section 5).
@@ -461,7 +454,6 @@ review/
 ├── map/
 ├── table/
 ├── photo/
-├── logo_icon/
 ├── other/
 ├── _unsure/      → not for training
 └── _broken/      → not for training

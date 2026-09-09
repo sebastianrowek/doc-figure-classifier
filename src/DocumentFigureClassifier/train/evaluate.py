@@ -1,5 +1,5 @@
 """
-Benchmark a fine-tuned 14-class checkpoint against a held-out split.
+Benchmark a fine-tuned Tier-1 checkpoint against a held-out split.
 
 Reports model quality -- accuracy, per-class precision / recall / F1, macro-F1,
 and the confusion matrix -- plus the cross-entropy loss (mean NLL), the single
@@ -11,7 +11,7 @@ separately and is deliberately not measured here.
 macro-F1 here uses the same definition train.py selects checkpoints on
 (macro_f1), so the reported number matches the selected one.
 
-Uses the full 14-way softmax (predict_proba), so nothing is thrown away.
+Uses the full softmax (predict_proba), so nothing is thrown away.
 
     PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.train.evaluate \
         --model models/tier1-smoke --split-index data/splits/index.jsonl --split test
@@ -81,14 +81,14 @@ def macro_f1(cm: torch.Tensor) -> float:
 
 
 def resolve_merges(groups: list[list[str]]) -> tuple[list[str], list[int]]:
-    """Turn label groups to merge into a remapping of the 14 classes.
+    """Turn label groups to merge into a remapping of the Tier-1 classes.
 
     Returns (merged_labels, id_map): id_map[c] is the collapsed-class index for
     each original class c (0..N-1), and merged_labels names the collapsed classes
     in original order. A class in no group keeps its own slot. A group's members
     all fold onto the slot of their lowest original index, named 'a+b'. This lets
     us report metrics as if two labels the model needn't separate were one class
-    (e.g. --merge other,logo_icon), so their mutual confusion no longer counts."""
+    (e.g. --merge bar_grouped,bar_stacked), so their mutual confusion no longer counts."""
     key_of = list(range(N))                       # canonical slot per original id
     name_of = {c: TIER1_LABELS[c] for c in range(N)}
     for g in groups:
@@ -168,7 +168,7 @@ def print_metrics(cm: torch.Tensor, labels: list[str], nll: float, title: str | 
     """Print accuracy, per-class PRF, macro-F1 and the confusion matrix for a
     confusion matrix over `labels`. Accuracy is derived from `cm` (trace/total),
     so it stays consistent with the matrix shown; `nll` is passed in because it
-    needs the probabilities. Works for the 14-class matrix and a merged one."""
+    needs the probabilities. Works for the full Tier-1 matrix and a merged one."""
     if title:
         print(title)
     total = int(cm.sum())
@@ -227,7 +227,7 @@ def main() -> None:
         action="append",
         metavar="a,b[,c]",
         help="also report metrics with these labels collapsed into one class "
-        "(repeatable), e.g. --merge other,logo_icon. The 14-class report is always shown too.",
+        "(repeatable), e.g. --merge bar_grouped,bar_stacked. The full Tier-1 report is always shown too.",
     )
     args = ap.parse_args()
 

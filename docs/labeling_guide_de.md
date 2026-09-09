@@ -28,8 +28,7 @@ Entscheidungsbaum in Abschnitt 2, nicht das Bauchgefühl.
 | `map` | Karte | Geografische Darstellung |
 | `table` | Tabelle | Zeilen-/Spaltenraster ohne grafische Kodierung |
 | `photo` | Foto | Fotografische Aufnahme |
-| `logo_icon` | Logo / Piktogramm | Marke, Siegel, Icon, Award |
-| `other` | Sonstiges | Alles, was in keine Klasse oben passt |
+| `other` | Sonstiges | Logos, Siegel, Icons/Piktogramme und alles, was in keine Klasse oben passt |
 
 ---
 
@@ -39,7 +38,7 @@ Von oben nach unten durchgehen, beim ersten Treffer stoppen.
 
 ```
 1. Ist es eine Fotografie (Personen, Gebäude, Produkte)?      → photo
-2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → logo_icon
+2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → other
 3. Zeigt das Bild Diagramme MEHRERER VERSCHIEDENER Typen?     → Regel R1 (Abschnitt 4)
 4. Ist eine geografische Karte das dominante Element?         → map
 5. Kästen/Knoten durch Pfeile verbunden (Prozess/Organigramm)? → flow
@@ -306,25 +305,14 @@ Diese Klasse ist wichtiger als sie wirkt: Geschäftsberichte bestehen visuell zu
 einem erheblichen Teil aus Fotografie, und das Modell muss lernen, diese sicher
 abzulehnen.
 
-### `logo_icon` — Logo und Piktogramm
-
-**Typisch:** Konzern- und Markenlogos, Zertifizierungssiegel (ISO, FSC),
-Auszeichnungen, Ratingsymbole, Icon-Sets in Nachhaltigkeitskapiteln,
-SDG-Kacheln.
-
-**Abgrenzung:** Ein Icon **innerhalb** eines Diagramms macht das Bild nicht zu
-`logo_icon` — es zählt der Bildinhalt als Ganzes.
-
-**Nicht hierher:**
-- Unterschriften
-- Große KPI-Kacheln oder -Zahlen
-
-### `other` — Sonstiges
+### `other` — Sonstiges (inkl. Logos und Piktogramme)
 
 Auffangklasse. Nicht optional: ohne sie liefert das Modell selbstbewusste
 Falschaussagen für alles, was es nicht kennt.
 
 **Typisch:**
+- Konzern- und Markenlogos, Zertifizierungssiegel (ISO, FSC), Auszeichnungen,
+  Ratingsymbole, Icon-Sets in Nachhaltigkeitskapiteln, SDG-Kacheln, Piktogramme
 - Zeitstrahlen, Meilensteine, Roadmaps
 - Wesentlichkeits- und Risikomatrizen
 - KPI-Kacheln (große Zahl + Label + Pfeil)
@@ -332,8 +320,12 @@ Falschaussagen für alles, was es nicht kennt.
 - Sankey, Radar, Tornado
 - Dekorative Grafik, Trennlinien, Extraktionsartefakte, leere Ausschnitte
 
+**Abgrenzung:** Ein Icon oder Logo **innerhalb** eines Diagramms macht das Bild
+nicht zu `other` — es zählt der Bildinhalt als Ganzes.
+
 Organigramme und Ablaufdiagramme gehören jetzt zu `flow`, Bubble-Charts zu
-`scatter` — nicht mehr hierher.
+`scatter` — nicht mehr hierher. (Logos und Piktogramme, früher eigene Klasse
+`logo_icon`, gehören jetzt hierher.)
 
 Wenn eine dieser Unterkategorien häufig auftritt, im Notizfeld vermerken. Ab
 einem gewissen Volumen lohnt sich eine eigene Klasse (siehe Abschnitt 5).
@@ -473,7 +465,6 @@ review/
 ├── map/
 ├── table/
 ├── photo/
-├── logo_icon/
 ├── other/
 ├── _unsure/      → nicht ins Training
 └── _broken/      → nicht ins Training

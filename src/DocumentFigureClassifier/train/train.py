@@ -1,8 +1,8 @@
 """
-Stage-1 fine-tuning loop for the 14-class figure classifier.
+Stage-1 fine-tuning loop for the Tier-1 figure classifier.
 
 Reads the split index built by split.py (the single source of truth for which
-image is in which split) and adapts docling's EfficientNet backbone to our 14
+image is in which split) and adapts docling's EfficientNet backbone to our
 Tier-1 labels with a fresh head (model.build_model). The result is written with
 `save_pretrained` so `model.FigureClassifier` can load it straight back.
 
@@ -27,7 +27,7 @@ from the Stage-1 checkpoint instead of the docling backbone, and --real-only to
 drop synth from the train split so the fine-tune sees real crops only. Val and
 test are real either way.
 
-    # Stage 1: fresh 14-way head on synth + capped real
+    # Stage 1: fresh Tier-1 head on synth + capped real
     PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.train.train \
         --split-index data/splits/index.jsonl --out models/tier1-stage1 \
         --epochs 6 --freeze-epochs 1 --batch-size 16 --device auto
@@ -163,7 +163,7 @@ def main() -> None:
         "--init-from",
         type=Path,
         default=None,
-        help="continue from a 14-class checkpoint (e.g. models/tier1-stage1) instead of the docling backbone; used for Stage 2",
+        help="continue from a fine-tuned Tier-1 checkpoint (same class count) instead of the docling backbone; used for Stage 2",
     )
     ap.add_argument(
         "--real-only",
@@ -174,7 +174,7 @@ def main() -> None:
     ap.add_argument("--freeze-epochs", type=int, default=1, help="epochs to keep the backbone frozen (head-only)")
     ap.add_argument("--batch-size", type=int, default=16)
     ap.add_argument("--backbone-lr", type=float, default=1e-5, help="LR for the pretrained backbone once unfrozen")
-    ap.add_argument("--head-lr", type=float, default=1e-3, help="LR for the fresh 14-way head")
+    ap.add_argument("--head-lr", type=float, default=1e-3, help="LR for the fresh classifier head")
     ap.add_argument("--patience", type=int, default=0, help="early-stop after N epochs with no macro-F1 gain (0=off)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--device", default="auto", help="auto|cpu|cuda|...")
