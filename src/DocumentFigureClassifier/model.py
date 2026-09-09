@@ -78,6 +78,18 @@ def build_model(pretrained: str = PRETRAINED_BACKBONE) -> EfficientNetForImageCl
     )
 
 
+def load_finetuned_for_training(checkpoint: str | Path) -> EfficientNetForImageClassification:
+    """Load an already-14-class checkpoint (e.g. the Stage-1 output) to keep
+    training from it. Unlike build_model, nothing is reinitialised: the trained
+    head is kept intact. Used by Stage 2, which continues from the Stage-1 model
+    rather than starting over from the docling backbone.
+    """
+    checkpoint = Path(checkpoint)
+    return EfficientNetForImageClassification.from_pretrained(
+        str(checkpoint), local_files_only=checkpoint.is_dir()
+    )
+
+
 def set_backbone_trainable(model: EfficientNetForImageClassification, trainable: bool) -> None:
     """Freeze or unfreeze the pretrained backbone (``model.efficientnet``).
 

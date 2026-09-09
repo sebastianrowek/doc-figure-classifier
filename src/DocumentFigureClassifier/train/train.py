@@ -22,11 +22,22 @@ macro-F1 (tie-break: lower val loss), which is the metric we actually care about
 under a table-heavy distribution -- not accuracy. Val loss is reported
 *unweighted*, an honest average NLL comparable across runs.
 
-Stage 2 (real-only close-out) is deliberately not built here yet.
+Stage 2 (real-only close-out) reuses this same loop: pass --init-from to continue
+from the Stage-1 checkpoint instead of the docling backbone, and --real-only to
+drop synth from the train split so the fine-tune sees real crops only. Val and
+test are real either way.
 
+    # Stage 1: fresh 14-way head on synth + capped real
     PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.train.train \
         --split-index data/splits/index.jsonl --out models/tier1-stage1 \
         --epochs 6 --freeze-epochs 1 --batch-size 16 --device auto
+
+    # Stage 2: continue from Stage 1 on real only, low LR, no freeze
+    PYTHONPATH=src .venv/Scripts/python.exe -m DocumentFigureClassifier.train.train \
+        --split-index data/splits/index.jsonl --out models/tier1-stage2 \
+        --init-from models/tier1-stage1 --real-only \
+        --epochs 4 --freeze-epochs 0 --backbone-lr 5e-6 --head-lr 5e-5 \
+        --patience 2 --batch-size 16 --device auto
 """
 
 from __future__ import annotations
@@ -42,6 +53,7 @@ from torch.utils.data import DataLoader
 
 from DocumentFigureClassifier.model import (
     build_model,
+    load_finetuned_for_training,
     make_transform,
     param_groups,
     set_backbone_trainable,
@@ -147,6 +159,17 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--split-index", type=Path, default=Path("data/splits/index.jsonl"))
     ap.add_argument("--out", type=Path, default=Path("models/tier1-stage1"))
+    ap.add_argument(
+        "--init-from",
+        type=Path,
+        default=None,
+        help="continue from a 14-class checkpoint (e.g. models/tier1-stage1) instead of the docling backbone; used for Stage 2",
+    )
+    ap.add_argument(
+        "--real-only",
+        action="store_true",
+        help="drop synth from the train split (source=real only); used for Stage 2",
+    )
     ap.add_argument("--epochs", type=int, default=6)
     ap.add_argument("--freeze-epochs", type=int, default=1, help="epochs to keep the backbone frozen (head-only)")
     ap.add_argument("--batch-size", type=int, default=16)
@@ -167,8 +190,11 @@ def main() -> None:
     device = resolve_device(args.device)
     print(f"device: {device}")
 
-    train_items = load_split(args.split_index, "train")
+    train_source = "real" if args.real_only else None
+    train_items = load_split(args.split_index, "train", source=train_source)
     val_items = load_split(args.split_index, "val")
+    if args.real_only:
+        print("real-only: synth dropped from the train split (Stage 2)")
     summarize("train", train_items)
     summarize("val", val_items)
     if not train_items:
@@ -186,7 +212,13 @@ def main() -> None:
         batch_size=args.batch_size,
     )
 
-    model = build_model().to(device)
+    if args.init_from is not None:
+        if not args.init_from.exists():
+            raise SystemExit(f"--init-from {args.init_from} not found")
+        print(f"initialising from checkpoint {args.init_from} (keeping its trained head)")
+        model = load_finetuned_for_training(args.init_from).to(device)
+    else:
+        model = build_model().to(device)
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights(train_items, device))
     optim = torch.optim.AdamW(param_groups(model, args.backbone_lr, args.head_lr))
 

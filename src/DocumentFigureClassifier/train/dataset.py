@@ -36,9 +36,11 @@ class FigureDataset(Dataset):
         return self.transform(img), label_id
 
 
-def load_split(index_path: Path, split: str) -> list[Item]:
+def load_split(index_path: Path, split: str, source: str | None = None) -> list[Item]:
     """Read split.py's index.jsonl and return the (path, label_id) items whose
-    `split` field matches. Rows with an unknown label are skipped loudly."""
+    `split` field matches. If `source` is given ('real' or 'synth'), only rows
+    with that source are kept -- Stage 2 uses source='real' to fine-tune on real
+    crops only. Rows with an unknown label are skipped loudly."""
     items: list[Item] = []
     with Path(index_path).open(encoding="utf-8") as fh:
         for line in fh:
@@ -47,6 +49,8 @@ def load_split(index_path: Path, split: str) -> list[Item]:
                 continue
             row = json.loads(line)
             if row.get("split") != split:
+                continue
+            if source is not None and row.get("source") != source:
                 continue
             label = row["label"]
             if label not in LABEL2ID:
