@@ -26,7 +26,7 @@ decision tree in section 2 decides, not your gut.
 | `combo_bar_line` | Kombidiagramm | Bars **and** a line in one plot |
 | `scatter` | Streudiagramm | Points in an x/y coordinate system, no connecting line |
 | `pie_donut` | Kreis-/Ringdiagramm | Circular part-to-whole display |
-| `flow` | Flussdiagramm | Boxes/nodes connected by arrows (process, flow, org chart) |
+| `flow` | Flussdiagramm | Nodes joined by **drawn** connectors into a progression or hierarchy |
 | `map` | Karte | Geographic representation |
 | `table` | Tabelle | Row/column grid without graphical encoding |
 | `photo` | Foto | Photographic image |
@@ -43,7 +43,8 @@ Work top to bottom, stop at the first match.
 2.  Is it a logo, seal, award or pictogram?                    → other
 3.  Does the image show charts of MULTIPLE DIFFERENT types?    → Rule R1 (section 4)
 4.  Is a geographic map the dominant element?                  → map
-5.  Boxes/nodes connected by arrows (process/org chart)?       → flow
+5.  Nodes joined by DRAWN connectors into a path/hierarchy?    → flow
+    (radial/hub-and-spoke, rings, connector-less stacks        → other)
 6.  Are bars AND a line present as data series?                → combo_bar_line
 7.  Circular part-to-whole display (full or ring form)?        → pie_donut
 8.  Do bars float between a start and an end value (bridge)?   → waterfall
@@ -235,35 +236,57 @@ map dominates the visual impression.
 
 ### `flow` — flow chart
 
-Boxes or nodes connected by arrows or lines into a process.
+Discrete nodes joined by **drawn** connectors into a directed progression or a
+hierarchy.
 
-**Typical:** Process and workflow diagrams, org charts, value chains, decision
-trees, governance and structure charts.
+**Two conditions must both hold:**
+
+1. **Explicit, drawn structure.** Either arrows/lines are visible *between* the
+   elements, or the element shapes themselves encode the progression —
+   interlocking chevrons, a segmented arrow, narrowing funnel stages. Plain
+   rectangles that merely sit next to or above one another do **not** qualify.
+2. **Direction or hierarchy.** The structure describes a progression (start →
+   end) or a parent → child tree. You can follow a path through the diagram.
+
+3. **The layout is linear or branching — never circular.** See below.
+
+**Typical:** Process and workflow diagrams, decision trees, org and governance
+charts *with drawn reporting lines*, value chains, swimlane diagrams, funnels.
 
 **Also belongs here:**
 - Horizontal as well as vertical flow direction.
-- Nodes with symbols inside them — as long as boxes and arrows form the
-  structure.
-
-**Note — arrows are not required; the relationship is.** The test is "can you
-rewrite it as nodes + edges that carry meaning (reports-to, contains, precedes,
-decides)?". Hierarchy and containment expressed purely through **layout** —
-vertical levels, nesting, a box spanning the ones below it — count as
-connections even with no drawn arrows or lines. Org charts, governance/temple
-diagrams, and layered frameworks therefore go to `flow`. (For the parser this
-means edges must be inferred from geometry, not only traced from arrow glyphs.)
+- Nodes with symbols or icons inside them — as long as nodes and connectors
+  form the structure.
 
 **Does not belong here:**
+- **Anything circular → `other`. `flow` is never round.** This is an absolute
+  rule, applied before every other test, so that "circular" is a reliable
+  signal for *not* `flow`. It covers:
+  - **Radial / hub-and-spoke diagrams** — a central element with items arranged
+    around it, even when spokes are drawn. There is no progression; the relation
+    is "belongs to the centre", not "precedes" or "reports to".
+  - **Ring, wheel and segmented-circle graphics** where the circle itself is the
+    graphic. Compare with `pie_donut` if it encodes proportions.
+  - **Process cycles** — boxes arranged in a loop with arrows (A → B → C → A),
+    even though they do show a progression. They are not a parsing target, and
+    excluding them keeps the rule free of exceptions.
+- **Connector-less stacked or layered boxes → `other`.** Org, governance and
+  compliance charts drawn as stacked colour bands or abutting boxes with no
+  drawn lines between them. Also layered "temple"/framework diagrams and
+  pyramids. If the only cue for hierarchy is that one box sits above or spans
+  another, it is **not** `flow`.
 - A set of equal peer boxes with no hierarchy or sequence — a styled list or
   icon grid where the only relation is "same category" → `other` (or `table`
-  if it is a real grid). If you cannot draw a meaningful edge, it is not `flow`.
+  if it is a real grid).
 - Sankey diagrams (flows with proportional width) → `other` for now.
 - Timelines/roadmaps without connecting flow logic → `other`. Test: remove the
   time axis — if it collapses to "events in date order" it is a timeline
   (`other`); if a relational structure survives (a phase gates/enables the next,
   branches) it is `flow`.
-- Pyramide-Visualizations
-- Circle-Diagrams without clear arrows or lines for connection
+
+**Quick test:** is it round? → `other`. Otherwise cover the connectors with your
+hand: if you can no longer tell what leads to what, it is `flow`; if the layout
+alone still carries the whole message, it is `other`.
 
 **Note:** The base model (DocumentFigureClassifier) already knows flow charts, so
 fewer real training examples are needed than for a brand-new class. The class is
@@ -312,14 +335,23 @@ statements for everything it does not know.
 - KPI tiles (large number + label + arrow)
 - Progress bars, gauges, traffic lights
 - Sankey, radar, tornado
+- **Radial and hub-and-spoke diagrams** — a central element with items arranged
+  around it, with or without drawn spokes
+- **Ring, wheel and segmented-circle graphics** where the circle itself is the
+  graphic (strategy wheels, cycle rings with abutting segments)
+- **Process cycles** — boxes in a loop joined by arrows (`flow` is never round)
+- **Connector-less stacked or layered box diagrams** — governance/compliance
+  charts drawn as stacked colour bands, layered "temple"/framework diagrams,
+  pyramids
 - Decorative graphics, separators, extraction artifacts, empty crops
 
 **Boundary:** An icon or logo **inside** a chart does not make the image
 `other` — what counts is the image content as a whole.
 
-Org charts and flow diagrams now go to `flow`, bubble charts to `scatter` — no
-longer here. (Logos and pictograms, previously their own `logo_icon` class, now
-belong here.)
+Bubble charts go to `scatter` — no longer here. (Logos and pictograms,
+previously their own `logo_icon` class, now belong here.) Flow diagrams go to
+`flow` **only when drawn connectors form a path or hierarchy** — see the `flow`
+section; radial, ring and connector-less box diagrams stay here.
 
 If one of these subcategories occurs frequently, note it in the notes field.
 Past a certain volume it is worth its own class (see section 5).
@@ -485,3 +517,5 @@ somewhere — sharpen it, do not admonish the labelers.
 | 1.1 | 2026-08-23 | `combo_bar_line` sharpened: the test is whether the line varies across categories, not whether it has a legend entry. Resolves a contradiction with the target-line rule. |
 | 1.2 | 2026-08-26 | Merged `bar_vertical` + `bar_horizontal` into `bar` (parsed identically downstream). Split grouped bars into their own class `bar_grouped`, and kept `bar_stacked` separate — both harder to parse. New classes `scatter` (to separate it from `line`) and `flow` (process/workflow/org charts, future parsing target). Now 14 tier-1 classes. |
 | 1.3 | 2026-08-31 | R1 scoped to charts of **different** types. Several charts of the **same** type (e.g. two donuts) are now labeled as that single class and kept whole — the label is unambiguous and the crop reaches the classifier whole at inference; instance-splitting is the parser's job. Decision-tree step 3 reworded accordingly. |
+| 1.4 | 2026-09-09 | `logo_icon` merged into `other`. Now 13 tier-1 classes. |
+| 1.5 | 2026-09-12 | **`flow` tightened — breaking change, requires relabeling.** `flow` now requires explicit drawn structure (connectors between elements, or directional shapes such as chevrons and funnel stages) *and* a direction/hierarchy, *and* a non-circular layout. Moved to `other`: radial and hub-and-spoke diagrams (even with drawn spokes), ring/wheel/segmented-circle graphics, **process cycles**, and connector-less stacked or layered box diagrams (governance colour bands, temple/framework layers, pyramids). **This reverses the previous rule** that hierarchy expressed purely through layout counted as a connection. "`flow` is never round" is now absolute and exception-free, which also gives the classifier a clean discriminative feature. Motivation: on the held-out test set `flow` recall was 42.5% with 50.9% of flow leaking to `other`, while `other` leaked back at only 1.6% — and the same visual families (governance wheels, org colour bands) were found labeled on both sides, i.e. the old definition was not consistently applicable. |
