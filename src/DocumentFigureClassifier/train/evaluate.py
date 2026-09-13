@@ -29,11 +29,40 @@ from DocumentFigureClassifier.model import FigureClassifier
 from DocumentFigureClassifier.taxonomy import TIER1_LABELS
 from DocumentFigureClassifier.train.dataset import load_split
 
-N = len(TIER1_LABELS)
+def model_labels(clf: FigureClassifier) -> list[str]:
+    """
+    The label names in the loaded checkpoint's own column order.
+
+    Everything downstream works in *this* space, not in TIER1_LABELS order. The
+    columns of predict_proba are defined by the checkpoint, so a checkpoint whose
+    class set differs from the current taxonomy (e.g. a 14-class model trained
+    before logo_icon was merged into other) would otherwise be scored against
+    misaligned columns -- silently for some classes, and with an IndexError as
+    soon as it predicts a class id the taxonomy no longer has.
+    """
+    return [clf.id2label[i] for i in range(len(clf.id2label))]
+
+
+def to_model_ids(targets: torch.Tensor, labels: list[str]) -> torch.Tensor:
+    """Remap ground-truth ids from TIER1_LABELS order into the checkpoint's order.
+
+    load_split labels each item by its position in TIER1_LABELS; the match is by
+    NAME, which is the only thing the two spaces reliably share."""
+    index = {name: i for i, name in enumerate(labels)}
+    missing = sorted({TIER1_LABELS[t] for t in set(targets.tolist())} - set(index))
+    if missing:
+        raise SystemExit(
+            f"checkpoint cannot score this split: it has no class for {', '.join(missing)}.\n"
+            f"  checkpoint classes: {', '.join(labels)}"
+        )
+    return torch.tensor([index[TIER1_LABELS[t]] for t in targets.tolist()], dtype=torch.long)
 
 
 def collect_probs(clf: FigureClassifier, items, chunk: int = 64) -> tuple[torch.Tensor, torch.Tensor]:
-    """Run the model over the split, returning (probs [M,N], targets [M])."""
+    """Run the model over the split, returning (probs [M,N], targets [M]).
+
+    Targets come back in TIER1_LABELS order; pass them through to_model_ids
+    before comparing them with the probability columns."""
     all_probs: list[torch.Tensor] = []
     targets: list[int] = []
     for i in range(0, len(items), chunk):
@@ -41,13 +70,13 @@ def collect_probs(clf: FigureClassifier, items, chunk: int = 64) -> tuple[torch.
         imgs = [Image.open(p).convert("RGB") for p, _ in batch]
         all_probs.append(clf.predict_proba(imgs))
         targets.extend(label_id for _, label_id in batch)
-    probs = torch.cat(all_probs) if all_probs else torch.empty(0, N)
+    probs = torch.cat(all_probs) if all_probs else torch.empty(0, len(clf.id2label))
     return probs, torch.tensor(targets, dtype=torch.long)
 
 
-def confusion(preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
-    """C[true, pred] counts, N x N."""
-    cm = torch.zeros(N, N, dtype=torch.long)
+def confusion(preds: torch.Tensor, targets: torch.Tensor, n: int) -> torch.Tensor:
+    """C[true, pred] counts, n x n (n = the checkpoint's class count)."""
+    cm = torch.zeros(n, n, dtype=torch.long)
     for t, p in zip(targets.tolist(), preds.tolist()):
         cm[t, p] += 1
     return cm
@@ -80,32 +109,34 @@ def macro_f1(cm: torch.Tensor) -> float:
     return sum(present) / len(present) if present else float("nan")
 
 
-def resolve_merges(groups: list[list[str]]) -> tuple[list[str], list[int]]:
-    """Turn label groups to merge into a remapping of the Tier-1 classes.
+def resolve_merges(groups: list[list[str]], labels: list[str]) -> tuple[list[str], list[int]]:
+    """Turn label groups to merge into a remapping of `labels` (the checkpoint's
+    classes, in its own column order).
 
     Returns (merged_labels, id_map): id_map[c] is the collapsed-class index for
-    each original class c (0..N-1), and merged_labels names the collapsed classes
-    in original order. A class in no group keeps its own slot. A group's members
+    each original class c, and merged_labels names the collapsed classes in
+    original order. A class in no group keeps its own slot. A group's members
     all fold onto the slot of their lowest original index, named 'a+b'. This lets
     us report metrics as if two labels the model needn't separate were one class
     (e.g. --merge bar_grouped,bar_stacked), so their mutual confusion no longer counts."""
-    key_of = list(range(N))                       # canonical slot per original id
-    name_of = {c: TIER1_LABELS[c] for c in range(N)}
+    n = len(labels)
+    key_of = list(range(n))                       # canonical slot per original id
+    name_of = {c: labels[c] for c in range(n)}
     for g in groups:
         for name in g:
-            if name not in TIER1_LABELS:
-                raise SystemExit(f"--merge: unknown label {name!r}; valid: {', '.join(TIER1_LABELS)}")
-        ids = sorted(TIER1_LABELS.index(name) for name in g)
+            if name not in labels:
+                raise SystemExit(f"--merge: unknown label {name!r}; valid: {', '.join(labels)}")
+        ids = sorted(labels.index(name) for name in g)
         head = ids[0]
         for i in ids:
             key_of[i] = head
-        name_of[head] = "+".join(TIER1_LABELS[i] for i in ids)
+        name_of[head] = "+".join(labels[i] for i in ids)
     order: list[int] = []                          # merged slots, first-appearance order
-    for c in range(N):
+    for c in range(n):
         if key_of[c] not in order:
             order.append(key_of[c])
     merged_index = {k: idx for idx, k in enumerate(order)}
-    id_map = [merged_index[key_of[c]] for c in range(N)]
+    id_map = [merged_index[key_of[c]] for c in range(n)]
     return [name_of[k] for k in order], id_map
 
 
@@ -128,7 +159,7 @@ def collapse_probs(probs: torch.Tensor, id_map: list[int], k: int) -> torch.Tens
     return m
 
 
-def plot_confusion(cm: torch.Tensor, out: Path, split: str, labels: list[str] = TIER1_LABELS) -> None:
+def plot_confusion(cm: torch.Tensor, out: Path, split: str, labels: list[str]) -> None:
     """Save a row-normalised confusion-matrix heatmap (rows=true, cols=pred).
 
     Row-normalised = each row shows where that true class's instances went, so
@@ -234,22 +265,34 @@ def main() -> None:
     items = load_split(args.split_index, args.split)
     print(f"loaded {len(items)} images from split '{args.split}'")
     clf = FigureClassifier(args.model, device=args.device)
+
+    # Score in the checkpoint's own label space, never in TIER1_LABELS order.
+    labels = model_labels(clf)
+    if labels != list(TIER1_LABELS):
+        extra = sorted(set(labels) - set(TIER1_LABELS))
+        print(
+            f"note: checkpoint has {len(labels)} classes, taxonomy has {len(TIER1_LABELS)}"
+            + (f"; checkpoint-only: {', '.join(extra)}" if extra else "")
+            + "\n      metrics are reported in the checkpoint's label space."
+        )
+
     probs, targets = collect_probs(clf, items)
 
     if len(targets) == 0:
         print("split is empty -- nothing to evaluate")
         return
 
+    targets = to_model_ids(targets, labels)
     preds = probs.argmax(1)
     # cross-entropy / mean NLL, probs clamped so a confident miss isn't infinite
     p_true = probs[torch.arange(len(targets)), targets].clamp_min(1e-12)
     nll = -p_true.log().mean().item()
-    cm = confusion(preds, targets)
-    print_metrics(cm, list(TIER1_LABELS), nll)
+    cm = confusion(preds, targets, len(labels))
+    print_metrics(cm, labels, nll)
 
     if args.merge:
         groups = [[s.strip() for s in spec.split(",") if s.strip()] for spec in args.merge]
-        merged_labels, id_map = resolve_merges(groups)
+        merged_labels, id_map = resolve_merges(groups, labels)
         k = len(merged_labels)
         mcm = collapse_cm(cm, id_map, k)
         mprobs = collapse_probs(probs, id_map, k)
@@ -260,7 +303,7 @@ def main() -> None:
 
     if args.plot is not None:
         args.plot.parent.mkdir(parents=True, exist_ok=True)
-        plot_confusion(cm, args.plot, args.split)
+        plot_confusion(cm, args.plot, args.split, labels)
 
 
 if __name__ == "__main__":
