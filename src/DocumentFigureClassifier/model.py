@@ -67,8 +67,8 @@ def build_model(pretrained: str = PRETRAINED_BACKBONE) -> EfficientNetForImageCl
 
     `ignore_mismatched_sizes=True` is what does the replacement: every backbone
     weight is loaded, and only the classifier layer -- whose shape no longer
-    matches (26 -> 14) -- is dropped and reinitialised. The new head starts from
-    random weights and is what training fits.
+    matches (26 -> len(TIER1_LABELS)) -- is dropped and reinitialised. The new
+    head starts from random weights and is what training fits.
     """
     return EfficientNetForImageClassification.from_pretrained(
         pretrained,
@@ -84,11 +84,28 @@ def load_finetuned_for_training(checkpoint: str | Path) -> EfficientNetForImageC
     training from it. Unlike build_model, nothing is reinitialised: the trained
     head is kept intact. Used by Stage 2, which continues from the Stage-1 model
     rather than starting over from the docling backbone.
+
+    Raises if the checkpoint's classes differ from the current taxonomy. Keeping
+    the head means keeping its class *order*, while the training targets come
+    from TIER1_LABELS -- so a stale checkpoint would train column i against a
+    different label than it was fitted for, and do it silently. (A 14-class
+    pre-merge checkpoint against the 13-class taxonomy is exactly this: every
+    id from `logo_icon` on is shifted.) Start such a run from build_model
+    instead, which reinitialises the head to the current labels.
     """
     checkpoint = Path(checkpoint)
-    return EfficientNetForImageClassification.from_pretrained(
+    model = EfficientNetForImageClassification.from_pretrained(
         str(checkpoint), local_files_only=checkpoint.is_dir()
     )
+    ckpt_labels = [model.config.id2label[i] for i in sorted(map(int, model.config.id2label))]
+    if ckpt_labels != list(TIER1_LABELS):
+        raise ValueError(
+            f"checkpoint {checkpoint} has an incompatible label set -- its head cannot be "
+            f"kept.\n  checkpoint ({len(ckpt_labels)}): {', '.join(ckpt_labels)}"
+            f"\n  taxonomy   ({len(TIER1_LABELS)}): {', '.join(TIER1_LABELS)}"
+            "\nTrain without --init-from to start from the backbone with a fresh head."
+        )
+    return model
 
 
 def set_backbone_trainable(model: EfficientNetForImageClassification, trainable: bool) -> None:
