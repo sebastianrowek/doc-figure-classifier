@@ -1,0 +1,117 @@
+{
+  "architectures": [
+    "EfficientNetForImageClassification"
+  ],
+  "batch_norm_eps": 0.001,
+  "batch_norm_momentum": 0.99,
+  "depth_coefficient": 1.0,
+  "depth_divisor": 8,
+  "depthwise_padding": [],
+  "drop_connect_rate": 0.2,
+  "dropout_rate": 0.2,
+  "dtype": "float32",
+  "expand_ratios": [
+    1,
+    6,
+    6,
+    6,
+    6,
+    6,
+    6
+  ],
+  "hidden_act": "swish",
+  "hidden_dim": 1280,
+  "id2label": {
+    "0": "bar_vertical",
+    "1": "bar_horizontal",
+    "2": "bar_stacked",
+    "3": "waterfall",
+    "4": "line",
+    "5": "combo_bar_line",
+    "6": "pie_donut",
+    "7": "map",
+    "8": "table",
+    "9": "photo",
+    "10": "logo_icon",
+    "11": "other"
+  },
+  "image_size": 224,
+  "in_channels": [
+    32,
+    16,
+    24,
+    40,
+    80,
+    112,
+    192
+  ],
+  "initializer_range": 0.02,
+  "kernel_sizes": [
+    3,
+    3,
+    5,
+    3,
+    5,
+    5,
+    3
+  ],
+  "label2id": {
+    "bar_horizontal": 1,
+    "bar_stacked": 2,
+    "bar_vertical": 0,
+    "combo_bar_line": 5,
+    "line": 4,
+    "logo_icon": 10,
+    "map": 7,
+    "other": 11,
+    "photo": 9,
+    "pie_donut": 6,
+    "table": 8,
+    "waterfall": 3
+  },
+  "model_type": "efficientnet",
+  "num_block_repeats": [
+    1,
+    2,
+    2,
+    3,
+    3,
+    4,
+    1
+  ],
+  "num_channels": 3,
+  "num_hidden_layers": 64,
+  "out_channels": [
+    16,
+    24,
+    40,
+    80,
+    112,
+    192,
+    320
+  ],
+  "out_features": null,
+  "pooling_type": "mean",
+  "squeeze_expansion_ratio": 0.25,
+  "stage_names": [
+    "stem",
+    "stage1",
+    "stage2",
+    "stage3",
+    "stage4",
+    "stage5",
+    "stage6",
+    "stage7"
+  ],
+  "strides": [
+    1,
+    2,
+    2,
+    2,
+    1,
+    2,
+    1
+  ],
+  "transformers_version": "5.15.1",
+  "width_coefficient": 1.0
+}

@@ -24,12 +24,11 @@ Entscheidungsbaum in Abschnitt 2, nicht das Bauchgefühl.
 | `combo_bar_line` | Kombidiagramm | Balken **und** Linie in einem Plot |
 | `scatter` | Streudiagramm | Punkte in einem X/Y-Koordinatensystem, ohne verbindende Linie |
 | `pie_donut` | Kreis-/Ringdiagramm | Kreisförmige Anteilsdarstellung |
-| `flow` | Flussdiagramm | Kästen/Knoten durch Pfeile verbunden (Prozess, Ablauf, Organigramm) |
+| `flow` | Flussdiagramm | Knoten durch **gezeichnete** Verbindungen zu Ablauf oder Hierarchie verbunden |
 | `map` | Karte | Geografische Darstellung |
 | `table` | Tabelle | Zeilen-/Spaltenraster ohne grafische Kodierung |
 | `photo` | Foto | Fotografische Aufnahme |
-| `logo_icon` | Logo / Piktogramm | Marke, Siegel, Icon, Award |
-| `other` | Sonstiges | Alles, was in keine Klasse oben passt |
+| `other` | Sonstiges | Logos, Siegel, Icons/Piktogramme und alles, was in keine Klasse oben passt |
 
 ---
 
@@ -39,10 +38,11 @@ Von oben nach unten durchgehen, beim ersten Treffer stoppen.
 
 ```
 1. Ist es eine Fotografie (Personen, Gebäude, Produkte)?      → photo
-2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → logo_icon
+2. Ist es ein Logo, Siegel, Award oder Piktogramm?            → other
 3. Zeigt das Bild Diagramme MEHRERER VERSCHIEDENER Typen?     → Regel R1 (Abschnitt 4)
 4. Ist eine geografische Karte das dominante Element?         → map
-5. Kästen/Knoten durch Pfeile verbunden (Prozess/Organigramm)? → flow
+5. Knoten durch GEZEICHNETE Verbindungen zu Pfad/Hierarchie?   → flow
+   (Radial/Nabe-Speiche, Ringe, Stapel ohne Verbindungen       → other)
 6. Sind Balken UND eine Linie als Datenreihen vorhanden?      → combo_bar_line
 7. Kreisförmige Anteilsdarstellung (Voll- oder Ringform)?     → pie_donut
 8. Schweben Balken zwischen Start- und Endwert (Brücke)?      → waterfall
@@ -161,6 +161,12 @@ Zinsentwicklung, Absatzverlauf.
   Vorerst zusammengefasst — bei relevantem Volumen später als `area` abtrennen.
 - Linien mit Punktmarkern.
 
+**Hinweis — Datenreihen zählen, nicht Striche.** Gitterlinien, Achsen, Ziel- /
+Referenzlinien, Ablese-Hilfslinien und Callout-Linien sind Diagramm-Beiwerk und
+ändern den Typ nicht. Ein Diagramm ist `line`, wenn es ≥1 Datenreihe als
+verbundene Linie in einem x/y-System zeigt — egal, wie viele Hilfsstriche darum
+liegen (z. B. eine Vergütungs-Zielerreichungskurve mit Ist-Wert-Marker → `line`).
+
 **Nicht hierher:** Linie zusammen mit Balken → `combo_bar_line`.
 
 ### `combo_bar_line` — Kombidiagramm
@@ -233,18 +239,59 @@ solange die Karte den Bildeindruck bestimmt.
 
 ### `flow` — Flussdiagramm
 
-Kästen oder Knoten, durch Pfeile oder Linien zu einem Ablauf verbunden.
+Einzelne Knoten, durch **gezeichnete** Verbindungen zu einem gerichteten Ablauf
+oder einer Hierarchie verbunden.
 
-**Typisch:** Prozess- und Ablaufdiagramme, Organigramme, Wertschöpfungsketten,
-Entscheidungsbäume, Governance- und Aufbaustrukturen.
+**Alle Bedingungen müssen erfüllt sein:**
+
+1. **Explizite, gezeichnete Struktur.** Entweder sind Pfeile/Linien *zwischen*
+   den Elementen sichtbar, oder die Elementformen selbst kodieren den Ablauf —
+   ineinandergreifende Chevrons, ein segmentierter Pfeil, sich verjüngende
+   Trichterstufen. Schlichte Rechtecke, die nur neben- oder übereinander
+   liegen, genügen **nicht**.
+2. **Richtung oder Hierarchie.** Die Struktur beschreibt einen Ablauf
+   (Anfang → Ende) oder einen Baum Eltern → Kind. Man kann einem Pfad folgen.
+3. **Das Layout ist linear oder verzweigt — niemals kreisförmig.** Siehe unten.
+
+**Typisch:** Prozess- und Ablaufdiagramme, Entscheidungsbäume, Organigramme und
+Governance-Strukturen *mit gezeichneten Berichtslinien*, Wertschöpfungsketten,
+Swimlane-Diagramme, Trichter.
 
 **Gehört ebenfalls hierher:**
 - Horizontale wie vertikale Flussrichtung.
-- Knoten mit Symbolen darin — solange Kästen und Pfeile die Struktur bilden.
+- Knoten mit Symbolen oder Icons darin — solange Knoten und Verbindungen die
+  Struktur bilden.
 
 **Nicht hierher:**
+- **Alles Kreisförmige → `other`. `flow` ist niemals rund.** Diese Regel gilt
+  absolut und wird vor allen anderen Tests angewandt, damit „kreisförmig" ein
+  verlässliches Signal für *nicht* `flow` ist. Sie umfasst:
+  - **Radial- und Nabe-Speiche-Diagramme** — ein zentrales Element mit ringsum
+    angeordneten Elementen, auch wenn Speichen gezeichnet sind. Es gibt keinen
+    Ablauf — die Beziehung lautet „gehört zur Mitte", nicht „geht voran".
+  - **Ring-, Rad- und Kreissegment-Grafiken**, bei denen der Kreis selbst die
+    Grafik ist. Bei Anteilsdarstellung stattdessen `pie_donut` prüfen.
+  - **Prozesskreisläufe** — Kästen im Kreis mit Pfeilen (A → B → C → A), auch
+    wenn sie einen Ablauf zeigen. Sie sind kein Parsing-Ziel, und ihr
+    Ausschluss hält die Regel frei von Ausnahmen.
+- **Gestapelte oder geschichtete Kästen ohne Verbindungen → `other`.**
+  Governance-, Compliance- und Organigramme als gestapelte Farbbänder oder
+  aneinandergrenzende Kästen ohne gezeichnete Linien. Ebenso geschichtete
+  Tempel-/Framework-Diagramme und Pyramiden. Wenn Hierarchie nur dadurch
+  angedeutet wird, dass ein Kasten über einem anderen liegt oder ihn
+  überspannt, ist es **kein** `flow`.
+- Eine Reihe gleichrangiger Kästen ohne Hierarchie oder Reihenfolge — eine
+  gestaltete Liste oder ein Icon-Raster, deren einzige Beziehung „gleiche
+  Kategorie" ist → `other` (oder `table`, wenn es ein echtes Raster ist).
 - Sankey-Diagramme (Flüsse mit proportionaler Breite) → vorerst `other`.
-- Zeitstrahlen/Roadmaps ohne verbindende Ablauflogik → `other`.
+- Zeitstrahlen/Roadmaps ohne verbindende Ablauflogik → `other`. Test: Zeitachse
+  entfernen — bleibt nur „Ereignisse in Datumsreihenfolge", ist es ein
+  Zeitstrahl (`other`); überlebt eine Beziehungsstruktur (eine Phase bedingt/
+  ermöglicht die nächste, Verzweigungen), ist es `flow`.
+
+**Schnelltest:** Ist es rund? → `other`. Sonst die Verbindungen mit der Hand
+verdecken: Ist dann nicht mehr erkennbar, was wohin führt, ist es `flow`; trägt
+das Layout allein die ganze Aussage, ist es `other`.
 
 **Hinweis:** Das Basismodell (DocumentFigureClassifier) kennt Flussdiagramme
 bereits, weshalb weniger echte Trainingsbeispiele nötig sind als für eine ganz
@@ -254,11 +301,23 @@ neue Klasse. Die Klasse ist als späteres Parsing-Ziel vorgesehen.
 
 Reines Zeilen-/Spaltenraster ohne grafische Kodierung von Werten.
 
-**Typisch:** Kennzahlenübersicht, Mehrjahresvergleich, die als Bild statt als
-Text im PDF vorliegt.
+**Typisch:** Kennzahlenübersicht, Mehrjahresvergleich oder ein qualitatives
+Raster (ESG-/Ziel-Tabelle, Governance-Grundsätze), das als Bild statt als
+Text im PDF vorliegt. Zellen dürfen **Zahlen oder Text** enthalten — nicht der
+Inhalt entscheidet über die Klasse, sondern die Struktur.
+
+**Hinweis — verbundene Zellen und unsaubere Struktur zählen mit.** Der Test
+lautet „Sieht ein Leser ein Zeilen-/Spaltenraster?", nicht „Ließe sich das
+sauber in ein Raster serialisieren?". Verbundene / zeilenübergreifende Zellen,
+leere Zellen, Zwischensummen- oder Summenzeilen und über mehrere Zeilen
+gespannte Fließtext-Zellen sind normale Tabellenbestandteile → weiterhin
+`table`. Die saubere Parsebarkeit ist Aufgabe des nachgelagerten Extraktors und
+wird bewusst nicht im Label kodiert.
 
 **Nicht hierher:** Tabellen mit eingebetteten Balken, Ampeln oder Sparklines —
-diese als `other` labeln und in der Notizspalte vermerken.
+diese als `other` labeln und in der Notizspalte vermerken. Ebenso farbcodierte
+Raster wie Risikomatrizen / Heatmaps (die Zellen tragen den Wert über die Farbe,
+nicht über Text) → `other`.
 
 ### `photo` — Fotografie
 
@@ -269,30 +328,37 @@ Diese Klasse ist wichtiger als sie wirkt: Geschäftsberichte bestehen visuell zu
 einem erheblichen Teil aus Fotografie, und das Modell muss lernen, diese sicher
 abzulehnen.
 
-### `logo_icon` — Logo und Piktogramm
-
-**Typisch:** Konzern- und Markenlogos, Zertifizierungssiegel (ISO, FSC),
-Auszeichnungen, Ratingsymbole, Icon-Sets in Nachhaltigkeitskapiteln,
-SDG-Kacheln.
-
-**Abgrenzung:** Ein Icon **innerhalb** eines Diagramms macht das Bild nicht zu
-`logo_icon` — es zählt der Bildinhalt als Ganzes.
-
-### `other` — Sonstiges
+### `other` — Sonstiges (inkl. Logos und Piktogramme)
 
 Auffangklasse. Nicht optional: ohne sie liefert das Modell selbstbewusste
 Falschaussagen für alles, was es nicht kennt.
 
 **Typisch:**
+- Konzern- und Markenlogos, Zertifizierungssiegel (ISO, FSC), Auszeichnungen,
+  Ratingsymbole, Icon-Sets in Nachhaltigkeitskapiteln, SDG-Kacheln, Piktogramme
 - Zeitstrahlen, Meilensteine, Roadmaps
 - Wesentlichkeits- und Risikomatrizen
 - KPI-Kacheln (große Zahl + Label + Pfeil)
 - Fortschrittsbalken, Tachos, Ampeln
 - Sankey, Radar, Tornado
+- **Radial- und Nabe-Speiche-Diagramme** — ein zentrales Element mit ringsum
+  angeordneten Elementen, mit oder ohne gezeichnete Speichen
+- **Ring-, Rad- und Kreissegment-Grafiken**, bei denen der Kreis selbst die
+  Grafik ist (Strategie-Räder, Kreisläufe mit aneinandergrenzenden Segmenten)
+- **Prozesskreisläufe** — Kästen im Kreis mit Pfeilen (`flow` ist nie rund)
+- **Gestapelte oder geschichtete Kastendiagramme ohne Verbindungen** —
+  Governance-/Compliance-Strukturen als gestapelte Farbbänder, geschichtete
+  Tempel-/Framework-Diagramme, Pyramiden
 - Dekorative Grafik, Trennlinien, Extraktionsartefakte, leere Ausschnitte
 
-Organigramme und Ablaufdiagramme gehören jetzt zu `flow`, Bubble-Charts zu
-`scatter` — nicht mehr hierher.
+**Abgrenzung:** Ein Icon oder Logo **innerhalb** eines Diagramms macht das Bild
+nicht zu `other` — es zählt der Bildinhalt als Ganzes.
+
+Bubble-Charts gehören zu `scatter` — nicht mehr hierher. (Logos und
+Piktogramme, früher eigene Klasse `logo_icon`, gehören jetzt hierher.)
+Ablaufdiagramme gehören **nur dann** zu `flow`, wenn gezeichnete Verbindungen
+einen Pfad oder eine Hierarchie bilden — siehe Abschnitt `flow`; Radial-, Ring-
+und verbindungslose Kastendiagramme bleiben hier.
 
 Wenn eine dieser Unterkategorien häufig auftritt, im Notizfeld vermerken. Ab
 einem gewissen Volumen lohnt sich eine eigene Klasse (siehe Abschnitt 5).
@@ -432,7 +498,6 @@ review/
 ├── map/
 ├── table/
 ├── photo/
-├── logo_icon/
 ├── other/
 ├── _unsure/      → nicht ins Training
 └── _broken/      → nicht ins Training
@@ -465,3 +530,5 @@ einer Stelle unklar — nachschärfen, nicht die Labeler ermahnen.
 | 1.1 | 2026-08-23 | `combo_bar_line` geschärft: Kriterium ist, ob sich die Linie über die Kategorien verändert, nicht ob sie einen Legendeneintrag hat. Behebt den Widerspruch zur Zielwertlinien-Regel. |
 | 1.2 | 2026-08-26 | `bar_vertical` + `bar_horizontal` zu `bar` zusammengelegt (nachgelagert identisch geparst). Gruppierte Balken als eigene Klasse `bar_grouped` ausgelagert, `bar_stacked` bleibt getrennt — beide schwerer zu parsen. Neue Klassen `scatter` (Abgrenzung gegen `line`) und `flow` (Prozess-/Ablauf-/Organigramme, späteres Parsing-Ziel). Jetzt 14 Tier-1-Klassen. |
 | 1.3 | 2026-08-31 | R1 auf Diagramme **verschiedener** Typen eingegrenzt. Mehrere Diagramme **desselben** Typs (z. B. zwei Ringe) werden jetzt als diese eine Klasse gelabelt und ganz gelassen — das Label ist eindeutig und der Ausschnitt erreicht den Klassifikator zur Inferenz als Ganzes; das Zerlegen in Instanzen ist Aufgabe des Parsers. Entscheidungsbaum-Schritt 3 entsprechend umformuliert. |
+| 1.4 | 2026-09-09 | `logo_icon` in `other` aufgegangen. Jetzt 13 Tier-1-Klassen. |
+| 1.5 | 2026-09-12 | **`flow` verschärft — Breaking Change, Relabeling nötig.** `flow` erfordert jetzt explizite gezeichnete Struktur (Verbindungen zwischen den Elementen oder richtungsgebende Formen wie Chevrons und Trichterstufen) *und* Richtung/Hierarchie *und* ein nicht-kreisförmiges Layout. Nach `other` verschoben: Radial- und Nabe-Speiche-Diagramme (auch mit gezeichneten Speichen), Ring-/Rad-/Kreissegment-Grafiken, **Prozesskreisläufe** sowie gestapelte oder geschichtete Kastendiagramme ohne Verbindungen (Governance-Farbbänder, Tempel-/Framework-Schichten, Pyramiden). **Das kehrt die bisherige Regel um**, nach der allein durch das Layout ausgedrückte Hierarchie als Verbindung zählte. „`flow` ist nie rund" gilt jetzt absolut und ausnahmslos, was dem Klassifikator zugleich ein sauberes Unterscheidungsmerkmal gibt. Anlass: auf dem Test-Set lag der `flow`-Recall bei 42,5 %, 50,9 % der `flow`-Bilder gingen nach `other`, umgekehrt nur 1,6 % — und dieselben visuellen Familien (Governance-Räder, Organigramm-Farbbänder) fanden sich auf beiden Seiten gelabelt, die alte Definition war also nicht konsistent anwendbar. |

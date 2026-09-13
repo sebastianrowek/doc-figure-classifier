@@ -9,7 +9,11 @@ Python server (stdlib only — no extra installs).
 
 - Pick a **root folder** that holds the class subfolders (default:
   `data/parsed/review`).
-- Pick a **subfolder** to review (e.g. `bar` or `_review`).
+- Pick a **subfolder** to review (e.g. `bar` or `_review`). The tool reopens
+  the folder you last reviewed under that root.
+- The **Manifest** field applies on its own — press `Enter` or click away and
+  the tool re-reads the manifest and re-checks it against the root right away.
+  Only the root needs the *Load* button.
 - Optionally set a **confidence filter** (the trailing number in each filename,
   e.g. `…__table__0.61.png`) to show only images at or below a threshold — handy
   for focusing on the low-confidence cases the model was least sure about. The
@@ -92,11 +96,20 @@ now lives in (or its `manual_root`) as the corrected ground truth.
 - Because root and manifest are configured independently, it's possible to pair
   a root with a manifest from a **different** dataset (e.g. a `data/parsed_new`
   root with the `data/parsed` manifest). Then the moved filenames match no
-  records and `manual_root` is silently never written. The tool now warns about
-  this — on startup, in the status line when you load a folder, in the commit
-  confirmation, and in the commit report — whenever the manifest lives outside
-  the root's own dataset folder.
+  records and `manual_root` is silently never written. The tool warns about this
+  in a **banner that stays up until you fix it** (plus on startup, in the commit
+  confirmation, and in the commit report). It flags three cases:
+  - the manifest lives outside the root's own dataset folder;
+  - **not one** of the images in the folder you're reviewing has a record in it —
+    which catches a wrong manifest that happens to sit in a parent directory and
+    so passes the path check;
+  - the manifest path doesn't exist at all.
 - If the manifest can't be found, moves still happen — only the `manual_root`
   write is skipped, and the commit report says so.
+- Loading is built for the big folders (`table` holds >16k crops): directory
+  listings use `scandir`, the parsed manifest is cached until the file changes
+  on disk, the JSON listings are gzipped, and crops are served over a keep-alive
+  connection with caching on. Switching folders quickly is safe — only the newest
+  request is allowed to repaint.
 - It's a local, single-user tool: it binds to localhost and reads/writes files
   under the root you choose.

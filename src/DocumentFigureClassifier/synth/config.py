@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..taxonomy import TIER1_LABELS
-from .renderers import bars, combo, flow, lines, logos, maps, other, pie, scatter, tables, waterfall
+from .renderers import bars, combo, flow, lines, maps, other, pie, scatter, tables, waterfall
 
 
 @dataclass(frozen=True)
@@ -100,12 +100,6 @@ REGISTRY: dict[str, ClassPlan] = {
         subtypes=tables.SUBTYPES,
         build_spec=tables.build_spec,
         render=tables.render_table,
-    ),
-    "logo_icon": ClassPlan(
-        label="logo_icon",
-        subtypes=logos.SUBTYPES,
-        build_spec=logos.build_spec,
-        render=logos.render_logo,
     ),
     "map": ClassPlan(
         label="map",

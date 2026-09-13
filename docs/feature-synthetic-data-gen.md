@@ -463,14 +463,28 @@ the class exists: guide decision-tree puts `scatter` before `line`). The
 regression line is drawn but *not* reported as a line series, so the scatter
 invariant holds.
 
-`flow` — boxes / nodes joined by arrows. Sub-types `org_chart` (a hierarchy),
-`process_flow` (chevrons left to right), `process_cycle` (a ring of arrows),
-`value_chain` (a segmented right-pointing arrow, Porter style), `swimlane`
-(boxes stepping between labelled horizontal lanes) and `funnel` (stacked,
-narrowing stages). The base DocumentFigureClassifier model already recognises
-flow charts, so this is a future parsing target (guide). Each renderer reports
-node/edge counts, and `base._check_flow` asserts the image is a connected
-diagram (≥2 nodes).
+`flow` — nodes joined by drawn connectors into a path or hierarchy. Sub-types
+`org_chart` (a 3–4 level hierarchy with right-angled reporting lines, optional
+dotted staff line and "line of defence" lane captions), `process_flow`
+(chevrons, a box chain, or a vertical stack), `decision_tree` (diamonds with
+yes/no branches), `swimlane` (boxes stepping between labelled horizontal lanes),
+`value_chain` (a segmented right-pointing arrow, Porter style), `nested_phase`
+(phase containers holding sub-steps, arrows between phases), `branch_merge` (one
+path splitting into parallel tracks and rejoining), `icon_step_chain` (icon +
+caption per step) and `funnel` (stacked, narrowing stages). All sub-types share
+optional chrome — title, subtitle, footnote — which reserves a vertical band the
+diagram lays out inside.
+
+Taxonomy v1.5 removed `process_cycle`: `flow` is now **never circular**, so
+rings, wheels, hub-and-spoke and cyclic layouts all belong to `other`. The
+sub-types deliberately cover the dense end of the real distribution — a test-set
+audit found the model had learned "flow == sparse box-and-arrow" from synth far
+simpler than real annual-report diagrams (flow recall 42.5%, half of it leaking
+to `other`).
+
+The base DocumentFigureClassifier model already recognises flow charts, so this
+is a future parsing target (guide). Each renderer reports node/edge counts, and
+`base._check_flow` asserts the image is a connected diagram (≥2 nodes).
 
 ---
 

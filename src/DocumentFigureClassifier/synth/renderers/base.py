@@ -216,12 +216,6 @@ def _check_table(s: Structure) -> str | None:
     return None
 
 
-def _check_logo(s: Structure) -> str | None:
-    if s.bar_series or s.line_series or s.pie_segments:
-        return "a data series in a logo"
-    return None
-
-
 def _check_other(s: Structure) -> str | None:
     # `other` is the catch-all: anything goes, by definition. The one thing
     # worth asserting is that it is not accidentally a clean chart of a class
@@ -243,7 +237,6 @@ _CHECKS = {
     "map": _check_map,
     "table": _check_table,
     "photo": lambda s: None,
-    "logo_icon": _check_logo,
     "other": _check_other,
 }
 
